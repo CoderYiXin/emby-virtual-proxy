@@ -118,8 +118,10 @@
 | tsukimi           | windows/linux         | ？                 |                                              |
 | Emby 小秘书版     | android               | ？                |                   |
 | hills             | android               | ？                 |                                              |
-| yamby             | android               | ❌                 |无法加载还没解决                                       |
-| 小幻硬是             | windows               | ✅                 |                                     |
+| yamby             | android               | ❌                 |套一层其他的nginx可以使用                                       |
+| 小幻影视             | windows               | ✅                 |                                     |
+| Forward             | tvos               | ✅                 |                                     |
+| SenPlayer             | tvos               | ✅                 |                                     |
 - **后端 (Backend)**:
     - **框架**: Python `FastAPI`
     - **异步处理**: `aiohttp` 用于与 Emby 服务器进行高性能的异步HTTP通信。
