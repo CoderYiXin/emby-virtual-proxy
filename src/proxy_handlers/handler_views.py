@@ -34,10 +34,20 @@ async def handle_view_injection(
     logger.info(f"Full layout control enabled. Intercepting views for path: {full_path}")
     
     target_url = f"{real_emby_url}/{full_path}"
-    headers = dict(request.headers)
     params = request.query_params
+    
+    # 采用更稳健的白名单策略转发必要的请求头，确保认证信息不丢失
+    headers_to_forward = {
+        k: v for k, v in request.headers.items() 
+        if k.lower() in [
+            'accept', 'accept-language', 'user-agent',
+            'x-emby-authorization', 'x-emby-client', 'x-emby-device-name',
+            'x-emby-device-id', 'x-emby-client-version', 'x-emby-language',
+            'x-emby-token'
+        ]
+    }
 
-    async with session.get(target_url, params=params, headers=headers) as resp:
+    async with session.get(target_url, params=params, headers=headers_to_forward) as resp:
         if resp.status != 200 or "application/json" not in resp.headers.get("Content-Type", ""):
             return None
 
@@ -100,9 +110,20 @@ async def handle_view_injection(
 
 async def legacy_handle_view_injection(request: Request, full_path: str, method: str, real_emby_url: str, session: ClientSession, config: AppConfig):
     target_url = f"{real_emby_url}/{full_path}"
-    headers = dict(request.headers)
     params = request.query_params
-    async with session.get(target_url, params=params, headers=headers) as resp:
+
+    # 同样在此处采用白名单策略
+    headers_to_forward = {
+        k: v for k, v in request.headers.items() 
+        if k.lower() in [
+            'accept', 'accept-language', 'user-agent',
+            'x-emby-authorization', 'x-emby-client', 'x-emby-device-name',
+            'x-emby-device-id', 'x-emby-client-version', 'x-emby-language',
+            'x-emby-token'
+        ]
+    }
+    
+    async with session.get(target_url, params=params, headers=headers_to_forward) as resp:
         if resp.status == 200 and "application/json" in resp.headers.get("Content-Type", ""):
             content_json = await resp.json()
             if content_json.get("Items"):

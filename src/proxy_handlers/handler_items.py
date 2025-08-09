@@ -7,7 +7,7 @@ from aiohttp import ClientSession
 from models import AppConfig, AdvancedFilter
 from typing import List, Any, Dict
 
-from . import handler_merger
+from . import handler_merger, handler_views
 # 导入我们新的翻译器和旧的后筛选逻辑
 from ._filter_translator import translate_rules
 from proxy_cache import vlib_items_cache
@@ -81,7 +81,18 @@ async def handle_virtual_library_items(
                 found_vlib = next((vlib for vlib in config.virtual_libraries if vlib.id == potential_path_vlib_id), None)
         except ValueError: pass
     
-    if not found_vlib: return None
+    if not found_vlib:
+        # 兼容Go版本的后备方案：处理非标准客户端（如网易爆米花）的请求
+        # 这些客户端通过 /Users/xxx/Items 获取根视图，且请求参数中不含任何 'Id'
+        has_id_param = any(key.lower().endswith('id') for key in params.keys())
+        
+        if not has_id_param:
+            logger.info("检测到非标准客户端请求 (无 'Id' 后缀参数)，作为后备方案返回媒体库视图。")
+            # 调用 handler_views 中的逻辑来返回一个伪造的根视图
+            return await handler_views.handle_view_injection(request, full_path, method, real_emby_url, session, config)
+        
+        # 如果有 'Id' 参数但不是虚拟库，则为正常请求，放行
+        return None
 
     logger.info(f"拦截到虚拟库 '{found_vlib.name}'，开始高性能筛选流程。")
     
@@ -147,7 +158,15 @@ async def handle_virtual_library_items(
     target_emby_api_path = f"Users/{user_id}/Items"
     search_url = f"{real_emby_url}/emby/{target_emby_api_path}"
     
-    headers_to_forward = {k: v for k, v in request.headers.items() if k.lower() in ['accept', 'accept-language', 'x-emby-authorization', 'x-emby-client', 'x-emby-device-name', 'x-emby-device-id', 'x-emby-client-version', 'x-emby-language']}
+    headers_to_forward = {
+        k: v for k, v in request.headers.items() 
+        if k.lower() in [
+            'accept', 'accept-language', 'user-agent',
+            'x-emby-authorization', 'x-emby-client', 'x-emby-device-name',
+            'x-emby-device-id', 'x-emby-client-version', 'x-emby-language',
+            'x-emby-token'
+        ]
+    }
     
     logger.debug(f"向真实 Emby 发起优化后的最终请求: URL={search_url}, Params={new_params}")
     async with session.request(method, search_url, params=new_params, headers=headers_to_forward) as resp:

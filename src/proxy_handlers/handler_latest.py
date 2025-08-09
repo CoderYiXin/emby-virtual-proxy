@@ -104,7 +104,16 @@ async def handle_home_latest_items(
     if found_vlib.resource_type in resource_map:
         new_params[resource_map[found_vlib.resource_type]] = found_vlib.resource_id
 
-    headers_to_forward = {k: v for k, v in request.headers.items() if k.lower() in ['accept', 'accept-language', 'x-emby-authorization', 'x-emby-client', 'x-emby-device-name', 'x-emby-device-id', 'x-emby-client-version', 'x-emby-language']}
+    # 采用白名单策略转发所有必要的请求头，确保认证信息不丢失
+    headers_to_forward = {
+        k: v for k, v in request.headers.items() 
+        if k.lower() in [
+            'accept', 'accept-language', 'user-agent',
+            'x-emby-authorization', 'x-emby-client', 'x-emby-device-name',
+            'x-emby-device-id', 'x-emby-client-version', 'x-emby-language',
+            'x-emby-token'
+        ]
+    }
     
     target_url = f"{real_emby_url}/emby/Users/{user_id}/Items"
     logger.debug(f"HOME_LATEST_HANDLER: Forwarding to URL={target_url}, Params={new_params}")
@@ -128,9 +137,10 @@ async def handle_home_latest_items(
                 final_limit = int(client_limit_str)
                 items_list = items_list[:final_limit]
             except (ValueError, TypeError): pass
-
-        data["Items"] = items_list
-        content = json.dumps(data).encode('utf-8')
+        
+        # 关键修复：/Items/Latest 端点需要直接返回一个 JSON 数组，而不是一个包含 "Items" 键的对象。
+        # 这与 Go 版本的实现保持一致。
+        content = json.dumps(items_list).encode('utf-8')
         return Response(content=content, status_code=200, headers={"Content-Type": "application/json"})
 
     return None
