@@ -3,3 +3,4 @@ docker-compose - 副本.yml
 logs.txt
 Dockerfile - 副本
 config/
+github.code-workspace
