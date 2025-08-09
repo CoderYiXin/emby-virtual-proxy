@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+aiohttp
+pydantic
+cachetools
+websockets
+docker
+Pillow==10.4.0
+numpy==1.26.4

@@ -1,0 +1,505 @@
+# src/admin_server.py
+
+import uvicorn
+from fastapi import FastAPI, APIRouter, HTTPException, Response, Query
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+import uuid
+import random
+import re
+import shutil
+import os
+import aiohttp
+import asyncio
+import sys
+import hashlib
+import time
+from typing import List, Dict, Optional
+from pydantic import BaseModel
+# 导入封面生成模块
+from cover_generator import style_multi_1
+import base64
+from PIL import Image
+from io import BytesIO
+from fastapi import Request
+
+import docker
+from proxy_cache import api_cache
+from models import AppConfig, VirtualLibrary, AdvancedFilter
+import config_manager
+
+# 【【【 在这里添加或者确认你有这几行 】】】
+import logging
+from proxy_handlers._filter_translator import translate_rules
+
+# 设置日志记录器
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+# 【【【 添加/确认结束 】】】
+
+
+admin_app = FastAPI(title="Emby Virtual Proxy - Admin API")
+api_router = APIRouter(prefix="/api")
+
+class CoverRequest(BaseModel):
+    library_id: str
+    library_name: str
+    title_en: Optional[str] = None
+# --- 高级筛选器 API ---
+@api_router.get("/advanced-filters", response_model=List[AdvancedFilter], tags=["Advanced Filters"])
+async def get_advanced_filters():
+    """获取所有高级筛选器规则"""
+    return config_manager.load_config().advanced_filters
+
+@api_router.post("/advanced-filters", status_code=204, tags=["Advanced Filters"])
+async def save_advanced_filters(filters: List[AdvancedFilter]):
+    """保存所有高级筛选器规则"""
+    # 这是一个全新的、更健壮的实现
+    try:
+        # 1. 加载当前配置的原始字典数据
+        current_config_dict = config_manager.load_config().model_dump()
+        
+        # 2. 将接收到的筛选器（它们是Pydantic模型）转换为字典列表
+        filters_dict_list = [f.model_dump() for f in filters]
+        
+        # 3. 更新字典中的 'advanced_filters' 键
+        current_config_dict['advanced_filters'] = filters_dict_list
+        
+        # 4. 使用更新后的完整字典来验证并创建一个新的 AppConfig 模型
+        new_config = AppConfig.model_validate(current_config_dict)
+        
+        # 5. 保存这个全新的、有效的配置对象
+        config_manager.save_config(new_config)
+        
+        return Response(status_code=204)
+    except Exception as e:
+        # 打印详细错误以供调试
+        print(f"保存高级筛选器时发生严重错误: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 【【【 最终版本的 _fetch_images_from_vlib 函数 】】】
+async def _fetch_images_from_vlib(library_id: str, temp_dir: Path, config: AppConfig):
+    """
+    从 proxy-core 的内部缓存中获取项目列表，并下载封面。
+    (最终架构版)
+    """
+    logger.info(f"开始从内部缓存为虚拟库 {library_id} 获取封面素材...")
+
+    proxy_core_url = os.getenv("PROXY_CORE_URL")
+    if not proxy_core_url:
+        raise HTTPException(status_code=500, detail="环境变量 PROXY_CORE_URL 未设置。")
+
+    # --- 1. 向 proxy-core 请求缓存数据 ---
+    target_url = f"{proxy_core_url.rstrip('/')}/api/internal/get-cached-items/{library_id}"
+    items = []
+    
+    logger.info(f"正在向内部代理服务 {target_url} 请求缓存数据...")
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(target_url, timeout=10) as response:
+                if response.status == 200:
+                    data = await response.json()
+                    items = data.get("Items", [])
+                else:
+                    error_detail = (await response.json()).get("detail")
+                    logger.error(f"从内部代理获取缓存失败 (Status: {response.status}): {error_detail}")
+                    raise HTTPException(status_code=response.status, detail=error_detail)
+    except aiohttp.ClientError as e:
+        logger.error(f"连接到内部代理服务时出错: {e}")
+        raise HTTPException(status_code=502, detail=f"无法连接到内部代理服务: {e}")
+
+    # --- 2. 后续处理 ---
+    items_with_images = [item for item in items if item.get("ImageTags", {}).get("Primary")]
+
+    if not items_with_images:
+        raise HTTPException(status_code=404, detail="缓存数据中不包含任何带有主封面的项目。")
+
+    selected_items = random.sample(items_with_images, min(9, len(items_with_images)))
+
+    # --- 并发下载图片 ---
+    async def download_image(session, item, index):
+        image_url = f"{config.emby_url.rstrip('/')}/emby/Items/{item['Id']}/Images/Primary"
+        headers = {'X-Emby-Token': config.emby_api_key}
+        try:
+            async with session.get(image_url, headers=headers, timeout=20) as response:
+                if response.status == 200:
+                    content = await response.read()
+                    image_path = temp_dir / f"{index}.jpg"
+                    with open(image_path, "wb") as f:
+                        f.write(content)
+                    return True
+        except Exception:
+            return False
+
+    async with aiohttp.ClientSession() as session:
+        tasks = [download_image(session, item, i + 1) for i, item in enumerate(selected_items)]
+        results = await asyncio.gather(*tasks)
+
+    if not any(results):
+        raise HTTPException(status_code=500, detail="所有封面素材下载失败，无法生成海报。")
+# --- 辅助函数：健壮地获取 Emby 数据 ---
+async def _fetch_from_emby(endpoint: str, params: Dict = None) -> List:
+    config = config_manager.load_config()
+    if not config.emby_url or not config.emby_api_key:
+        raise HTTPException(status_code=400, detail="请在系统设置中配置Emby服务器地址和API密钥。")
+    
+    headers = {'X-Emby-Token': config.emby_api_key, 'Accept': 'application/json'}
+    url = f"{config.emby_url.rstrip('/')}/emby{endpoint}"
+    
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, headers=headers, params=params, timeout=15) as response:
+                if response.status != 200:
+                    error_text = await response.text()
+                    logger_msg = f"从Emby获取数据失败 (Endpoint: {endpoint}, Status: {response.status}): {error_text}"
+                    print(f"[PROXY-ADMIN-ERROR] {logger_msg}")
+                    raise HTTPException(status_code=response.status, detail=logger_msg)
+                
+                json_response = await response.json()
+                if isinstance(json_response, dict):
+                    return json_response.get("Items", json_response)
+                elif isinstance(json_response, list):
+                    return json_response
+                else:
+                    return []
+    except aiohttp.ClientError as e:
+        logger_msg = f"连接到Emby时发生网络错误 (Endpoint: {endpoint}): {e}"
+        print(f"[PROXY-ADMIN-ERROR] {logger_msg}")
+        raise HTTPException(status_code=502, detail=logger_msg)
+    except Exception as e:
+        logger_msg = f"处理Emby请求时发生未知错误 (Endpoint: {endpoint}): {e}"
+        print(f"[PROXY-ADMIN-ERROR] {logger_msg}")
+        raise HTTPException(status_code=500, detail=logger_msg)
+
+async def get_real_libraries_hybrid_mode() -> List:
+    all_real_libs = {}
+    try:
+        media_folders = await _fetch_from_emby("/Library/MediaFolders")
+        for lib in media_folders:
+            lib_id = lib.get("Id")
+            if lib_id:
+                all_real_libs[lib_id] = {
+                    "Id": lib_id, "Name": lib.get("Name"), "CollectionType": lib.get("CollectionType")
+                }
+    except HTTPException as e:
+        print(f"[PROXY-ADMIN-WARNING] 从 /Library/MediaFolders 获取数据失败: {e.detail}")
+
+    try:
+        user_items = await _fetch_from_emby("/Users")
+        if user_items:
+            ref_user_id = user_items[0].get("Id")
+            if ref_user_id:
+                views = await _fetch_from_emby(f"/Users/{ref_user_id}/Views")
+                for lib in views:
+                    lib_id = lib.get("Id")
+                    if lib_id and lib_id not in all_real_libs:
+                        all_real_libs[lib_id] = {
+                           "Id": lib_id, "Name": lib.get("Name"), "CollectionType": lib.get("CollectionType")
+                        }
+    except HTTPException as e:
+         print(f"[PROXY-ADMIN-WARNING] 从 /Users/.../Views 获取数据失败: {e.detail}")
+
+    return list(all_real_libs.values())
+
+
+# --- API ---
+@api_router.get("/config", response_model=AppConfig, response_model_by_alias=True, tags=["Configuration"])
+async def get_config():
+    return config_manager.load_config()
+
+# 修改 update_config
+@api_router.post("/config", response_model=AppConfig, response_model_by_alias=True, tags=["Configuration"])
+async def update_config(config: AppConfig):
+    config_manager.save_config(config)
+    return config
+
+# 将 /cache/clear 路径改为 /proxy/restart，功能也彻底改变
+@api_router.post("/proxy/restart", status_code=204, tags=["System Management"])
+async def restart_proxy_container():
+    """
+    通过 Docker API 重启代理服务器容器。
+    这会自动清除其内存中的所有缓存。
+    """
+    proxy_container_name = os.getenv("PROXY_CONTAINER_NAME")
+    if not proxy_container_name:
+        print("[PROXY-ADMIN-ERROR] 环境变量 PROXY_CONTAINER_NAME 未设置。")
+        raise HTTPException(
+            status_code=500,
+            detail="Admin服务未配置目标容器名称，无法执行重启。"
+        )
+
+    try:
+        # 通过挂载的 socket 连接到 Docker 守护进程
+        client = docker.from_env()
+        
+        print(f"[PROXY-ADMIN-INFO] 正在查找要重启的容器: '{proxy_container_name}'")
+        proxy_container = client.containers.get(proxy_container_name)
+        
+        print(f"[PROXY-ADMIN-INFO] 找到容器，正在执行重启...")
+        proxy_container.restart()
+        
+        print(f"[PROXY-ADMIN-INFO] 重启命令已发送至容器 '{proxy_container_name}'。")
+        return Response(status_code=204)
+
+    except docker.errors.NotFound:
+        print(f"[PROXY-ADMIN-ERROR] 找不到名为 '{proxy_container_name}' 的容器。")
+        raise HTTPException(
+            status_code=404,
+            detail=f"找不到名为 '{proxy_container_name}' 的容器。请检查 docker-compose.yml 配置。"
+        )
+    except docker.errors.APIError as e:
+        print(f"[PROXY-ADMIN-ERROR] 与 Docker API 通信时出错: {e}")
+        raise HTTPException(
+            status_code=502, # Bad Gateway，表示代理角色执行上游操作失败
+            detail=f"与 Docker API 通信时出错: {e}"
+        )
+    except Exception as e:
+        print(f"[PROXY-ADMIN-ERROR] 重启容器时发生未知错误: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"重启容器时发生未知内部错误: {e}"
+        )
+
+@api_router.post("/generate-cover", tags=["Cover Generator"])
+async def generate_cover(body: CoverRequest):
+    try:
+        # 调用核心生成逻辑
+        image_tag = await _generate_library_cover(body.library_id, body.library_name, body.title_en)
+        if image_tag:
+            # 成功后，需要找到对应的虚拟库并更新其 image_tag
+            config = config_manager.load_config()
+            vlib_found = False
+            for vlib in config.virtual_libraries:
+                if vlib.id == body.library_id:
+                    vlib.image_tag = image_tag
+                    vlib_found = True
+                    break
+            if vlib_found:
+                config_manager.save_config(config)
+                return {"success": True, "image_tag": image_tag}
+            else:
+                raise HTTPException(status_code=404, detail="未找到要更新封面的虚拟库。")
+        else:
+            raise HTTPException(status_code=500, detail="封面生成失败，详见后端日志。")
+    except Exception as e:
+        print(f"[COVER-GEN-ERROR] 封面生成过程中发生异常: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# 封面生成的核心逻辑
+async def _generate_library_cover(library_id: str, library_name: str, title_en: Optional[str] = None) -> Optional[str]:
+    config = config_manager.load_config()
+    # --- 1. 定义路径 ---
+    FONT_DIR = "/app/src/assets/fonts/"
+    OUTPUT_DIR = "/app/config/images/"
+    
+    Path(OUTPUT_DIR).mkdir(exist_ok=True)
+    
+    zh_font_path = os.path.join(FONT_DIR, "multi_1_zh.ttf")
+    en_font_path = os.path.join(FONT_DIR, "multi_1_en.otf")
+
+    # 创建一个唯一的临时目录来存放下载的素材
+    image_gen_dir = Path(OUTPUT_DIR) / f"temp_{str(uuid.uuid4())}"
+    image_gen_dir.mkdir()
+
+    try:
+        # --- 2. 【核心改动】: 从虚拟库下载图片素材 ---
+        await _fetch_images_from_vlib(library_id, image_gen_dir, config)
+
+        # --- 3. 调用生成函数 ---
+        logger.info(f"素材准备完毕，开始为 '{library_name}' ({library_id}) 生成封面...")
+        res = style_multi_1.create_style_multi_1(
+            library_dir=str(image_gen_dir),
+            title=(library_name, title_en),
+            font_path=(zh_font_path, en_font_path)
+        )
+        
+        if not res:
+            logger.error(f"style_multi_1 函数返回失败。")
+            raise HTTPException(status_code=500, detail="封面生成函数内部错误。")
+
+        # --- 4. 解码、转换并以虚拟库ID为名保存图片 ---
+        image_data = base64.b64decode(res)
+        img = Image.open(BytesIO(image_data))
+
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+
+        final_filename = f"{library_id}.jpg"
+        output_path = os.path.join(OUTPUT_DIR, final_filename)
+        
+        img.save(output_path, "JPEG", quality=90)
+        
+        image_tag = hashlib.md5(str(time.time()).encode()).hexdigest()
+        
+        logger.info(f"封面成功保存至: {output_path}, ImageTag: {image_tag}")
+
+        return image_tag
+
+    except HTTPException as http_exc:
+        # 直接向上抛出HTTP异常，以便前端可以显示具体的错误信息
+        raise http_exc
+    except Exception as e:
+        logger.error(f"封面生成过程中发生未知错误: {e}", exc_info=True)
+        return None
+    finally:
+        # --- 5. 【核心改动】: 清理临时目录 ---
+        if image_gen_dir.exists():
+            shutil.rmtree(image_gen_dir)
+            logger.info(f"已清理临时素材目录: {image_gen_dir}")
+
+@api_router.get("/all-libraries", tags=["Display Management"])
+async def get_all_libraries():
+    all_libs = []
+    try:
+        real_libs_from_emby = await get_real_libraries_hybrid_mode()
+        for lib in real_libs_from_emby:
+            all_libs.append({
+                "id": lib.get("Id"), "name": lib.get("Name"), "type": "real",
+                "collectionType": lib.get("CollectionType")
+            })
+    except HTTPException as e:
+        raise e
+
+    config = config_manager.load_config()
+    for lib in config.virtual_libraries:
+        all_libs.append({
+            "id": lib.id, "name": lib.name, "type": "virtual",
+        })
+    
+    return all_libs
+    
+@api_router.post("/display-order", status_code=204, tags=["Display Management"])
+async def save_display_order(ordered_ids: List[str]):
+    config = config_manager.load_config()
+    config.display_order = ordered_ids
+    config_manager.save_config(config)
+    return Response(status_code=204)
+
+@api_router.post("/libraries", response_model=VirtualLibrary, tags=["Libraries"])
+async def create_library(library: VirtualLibrary):
+    config = config_manager.load_config()
+    library.id = str(uuid.uuid4())
+    if not hasattr(config, 'virtual_libraries'):
+        config.virtual_libraries = []
+    
+    config.virtual_libraries.append(library)
+    if library.id not in config.display_order:
+        config.display_order.append(library.id)
+        
+    config_manager.save_config(config)
+    return library
+
+@api_router.put("/libraries/{library_id}", response_model=VirtualLibrary, tags=["Libraries"])
+async def update_library(library_id: str, updated_library_data: VirtualLibrary):
+    config = config_manager.load_config()
+    lib_to_update = None
+    for lib in config.virtual_libraries:
+        if lib.id == library_id:
+            lib_to_update = lib
+            break
+    
+    if not lib_to_update:
+        raise HTTPException(status_code=404, detail="Virtual library not found")
+
+    # 【核心修复】: 不完全替换，而是更新字段
+    # .model_dump(exclude_unset=True) 只获取客户端实际发送过来的字段
+    update_data = updated_library_data.model_dump(exclude_unset=True)
+    
+    # 使用 Pydantic 的 model_copy 方法安全地更新模型
+    updated_lib = lib_to_update.model_copy(update=update_data)
+    
+    # 在列表中替换掉旧的模型
+    for i, lib in enumerate(config.virtual_libraries):
+        if lib.id == library_id:
+            config.virtual_libraries[i] = updated_lib
+            break
+            
+    config_manager.save_config(config)
+    return updated_lib
+
+@api_router.delete("/libraries/{library_id}", status_code=204, tags=["Libraries"])
+async def delete_library(library_id: str):
+    config = config_manager.load_config()
+    original_length = len(config.virtual_libraries)
+    
+    config.virtual_libraries = [lib for lib in config.virtual_libraries if lib.id != library_id]
+    
+    if library_id in config.display_order:
+        config.display_order.remove(library_id)
+        
+    if len(config.virtual_libraries) == original_length:
+        raise HTTPException(status_code=404, detail="Virtual library not found")
+        
+    config_manager.save_config(config)
+    return Response(status_code=204)
+
+@api_router.get("/emby/classifications", tags=["Emby Helper"])
+async def get_emby_classifications():
+    def format_items(items_list: List) -> List:
+        return [{"name": item.get("Name", 'N/A'), "id": item.get("Id", 'N/A')} for item in items_list]
+
+    try:
+        tasks = {
+            "collections": _fetch_from_emby("/Items", params={"IncludeItemTypes": "BoxSet", "Recursive": "true"}),
+            "genres": _fetch_from_emby("/Genres"),
+            "tags": _fetch_from_emby("/Tags"),
+            "studios": _fetch_from_emby("/Studios"),
+        }
+        results_list = await asyncio.gather(*tasks.values())
+        results_dict = dict(zip(tasks.keys(), results_list))
+        results_dict["persons"] = []
+        return {key: format_items(value) for key, value in results_dict.items()}
+    except HTTPException as e:
+        raise e
+
+@api_router.get("/emby/persons/search", tags=["Emby Helper"])
+async def search_emby_persons(query: str = Query(None), page: int = Query(1)):
+    PAGE_SIZE = 100
+    start_index = (page - 1) * PAGE_SIZE
+    try:
+        if query:
+            params = { "SearchTerm": query, "IncludeItemTypes": "Person", "Recursive": "true", "StartIndex": start_index, "Limit": PAGE_SIZE }
+            persons = await _fetch_from_emby("/Items", params=params)
+        else:
+            params = { "StartIndex": start_index, "Limit": PAGE_SIZE }
+            persons = await _fetch_from_emby("/Persons", params=params)
+        return [{"name": item.get("Name", 'N/A'), "id": item.get("Id", 'N/A')} for item in persons]
+    except HTTPException as e:
+        raise e
+
+@api_router.get("/emby/resolve-item/{item_id}", tags=["Emby Helper"])
+async def resolve_emby_item(item_id: str):
+    try:
+        users = await _fetch_from_emby("/Users")
+        if not users:
+            raise HTTPException(status_code=500, detail="无法获取任何Emby用户用于查询")
+        
+        ref_user_id = users[0]['Id']
+        item_details = await _fetch_from_emby(f"/Users/{ref_user_id}/Items/{item_id}")
+        
+        if not item_details:
+             raise HTTPException(status_code=404, detail="在Emby中未找到指定的项目ID")
+        
+        return {"name": item_details.get("Name", "N/A"), "id": item_details.get("Id")}
+
+    except HTTPException as e:
+        raise e
+
+admin_app.include_router(api_router)
+static_dir = Path("/app/static")
+if not static_dir.is_dir():
+    local_static_dir = Path(__file__).parent.parent.parent / "frontend/dist"
+    if local_static_dir.is_dir():
+        static_dir = local_static_dir
+    else:
+        sys.exit(1)
+if not (static_dir / "index.html").is_file():
+     sys.exit(1)
+
+# 新增：挂载生成的封面图目录，使其可以通过 /covers/... 访问
+covers_dir = Path("/app/config/images")
+covers_dir.mkdir(exist_ok=True) # 确保目录存在
+admin_app.mount("/covers", StaticFiles(directory=str(covers_dir)), name="covers")
+
+
+admin_app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
