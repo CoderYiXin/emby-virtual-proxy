@@ -1,6 +1,18 @@
-docker-compose-pro.yml
-docker-compose - 副本.yml
-logs.txt
-Dockerfile - 副本
-config/
+# VS Code 工作区文件
 github.code-workspace
+
+# 副本文件
+docker-compose - 副本.yml
+Dockerfile - 副本
+
+# 包含敏感信息或本地环境的配置文件
+docker-compose-pro.yml
+config/
+
+# 日志文件
+logs.txt
+*.log
+
+# Python 缓存
+__pycache__/
+*.pyc
