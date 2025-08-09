@@ -121,7 +121,7 @@
 
 本项目的设计和功能受到了以下优秀项目的启发，特此感谢：
 
-- **[EkkoG/emby-virtual-lib](https.github.com/EkkoG/emby-virtual-lib)**
+- **[EkkoG/emby-virtual-lib](https://github.com/EkkoG/emby-virtual-lib)**
 
 ---
 
