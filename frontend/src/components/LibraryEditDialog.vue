@@ -13,7 +13,7 @@
       
       <el-form-item label="资源类型" required>
         <el-select v-model="store.currentLibrary.resource_type" @change="store.currentLibrary.resource_id = ''">
-          <el-option label="收藏夹 (Collection)" value="collection"></el-option>
+          <el-option label="合集 (Collection)" value="collection"></el-option>
           <el-option label="标签 (Tag)" value="tag"></el-option>
           <el-option label="类型 (Genre)" value="genre"></el-option>
           <el-option label="工作室 (Studio)" value="studio"></el-option>
@@ -72,7 +72,7 @@
       
       <el-divider>封面生成</el-divider>
 
-      <el-form-item label="封面预览">
+      <el-form-item label="当前封面">
         <div class="cover-preview-wrapper">
           <img v-if="store.currentLibrary.image_tag" :src="coverImageUrl" class="cover-preview-image" />
           <div v-else class="cover-preview-placeholder">暂无封面</div>
@@ -91,7 +91,10 @@
           >
             {{ store.currentLibrary.image_tag ? '重新生成封面' : '生成封面' }}
           </el-button>
-          <p class="tip">此功能将从该虚拟库中随机选取内容自动合成封面图。</p>
+          <div class="button-tips">
+            <p class="tip">此功能将从该虚拟库中随机选取内容自动合成封面图。</p>
+            <p class="tip tip-warning">注意：生成封面需要缓存数据。请先在客户端访问一次该虚拟库，然后再点此生成。</p>
+          </div>
       </el-form-item>
 
     </el-form>
@@ -213,12 +216,19 @@ watch(() => store.dialogVisible, (newVal) => {
 </script>
 
 <style scoped>
+.button-tips {
+  margin-left: 10px;
+  line-height: 1.4;
+  align-self: center;
+}
 .tip {
   font-size: 12px;
   color: #999;
-  margin-left: 10px;
-  margin-top: 0;
-  line-height: 32px;
+  margin: 0;
+  padding: 0;
+}
+.tip-warning {
+    color: #E6A23C; /* Element Plus warning color */
 }
 .cover-preview-wrapper {
   width: 200px;

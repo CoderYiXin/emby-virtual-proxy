@@ -131,13 +131,14 @@ onMounted(() => {
 /* 修复夜间模式开关图标颜色 */
 .theme-switch {
   --el-switch-on-color: #2c2c2c;
-  --el-switch-off-color: #f2f2f2;
+  --el-switch-off-color: #dcdfe6; /* 亮色模式背景，使用Element Plus的边框颜色，更清晰 */
+  --el-switch-border-color: var(--el-border-color);
 }
 .theme-switch .el-switch__core .el-icon {
-  color: #999; /* 亮色模式下图标颜色 */
+  color: #303133; /* 亮色模式下图标颜色，使用主要文字颜色 */
 }
 .dark .theme-switch .el-switch__core .el-icon {
-  color: #666; /* 暗色模式下图标颜色 */
+  color: #999; /* 暗色模式下图标颜色，调亮一点更清晰 */
 }
 .theme-switch .is-active .el-icon {
   color: #fff; /* 激活时（无论日夜）图标颜色 */
