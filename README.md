@@ -4,6 +4,23 @@
 
 ---
 
+<details>
+<summary><strong>点击展开/折叠更新日志</strong></summary>
+
+---
+
+### 🎉 [1.0.0] - 2025-08-09
+- **项目首次发布**: 部署 Emby Virtual Proxy 初始版本。
+- **核心功能**:
+    - 实现虚拟媒体库、高级内容过滤与聚合。
+    - 支持为虚拟库自动生成风格化封面。
+- **管理后台**: 提供基于 Vue.js 的现代化 Web UI 用于全部功能配置。
+- **容器化**: 支持通过 Docker 和 Docker Compose 进行快速、一键式部署。
+
+---
+
+</details>
+
 ## 🚀 快速开始 (Docker Compose)
 
 1.  在您的服务器上创建一个目录，例如 `emby-proxy`。
