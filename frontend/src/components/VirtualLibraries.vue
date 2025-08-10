@@ -4,14 +4,16 @@
             <div class="card-header">
                 <span>虚拟媒体库管理</span>
                 <div>
-                              <el-button 
-            type="warning" 
-            :icon="VideoPlay" 
-            @click="store.restartProxyServer()"
-            plain
-          >
-                        清除后端缓存
-                    </el-button>
+                    <el-tooltip content="重启整个服务容器。这是清除代理内存缓存的正确方式。" placement="top">
+                        <el-button 
+                            type="warning" 
+                            :icon="Refresh" 
+                            @click="store.restartProxyServer()"
+                            plain
+                        >
+                            重启服务 (清缓存)
+                        </el-button>
+                    </el-tooltip>
                     <el-button @click="store.fetchAllEmbyData" :loading="store.dataLoading" :disabled="store.dataLoading">
                         {{ store.dataLoading ? '正在加载...' : '刷新Emby数据' }}
                     </el-button>
@@ -66,7 +68,7 @@
 
 <script setup>
 import { useMainStore } from '@/stores/main';
-import { WarningFilled } from '@element-plus/icons-vue';
+import { WarningFilled, Refresh } from '@element-plus/icons-vue';
 
 const store = useMainStore();
 

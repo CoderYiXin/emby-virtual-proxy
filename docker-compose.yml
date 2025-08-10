@@ -1,38 +1,17 @@
 version: '3.8'
-
 services:
-  admin:
+  app:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: emby-proxy-admin
-    command: ["python", "src/main.py", "admin"]
+    container_name: emby-proxy
     ports:
       - "8011:8001"
-    volumes:
-      - ./config:/app/config
-      - ./generated_covers:/app/generated_covers
-      # --- 新增内容 ---
-      # 1. 挂载 Docker socket，允许此容器与 Docker 守护进程通信
-      - /var/run/docker.sock:/var/run/docker.sock
-    # 2. 将代理容器的固定名称作为环境变量传给 admin 服务
-    environment:
-      - PROXY_CONTAINER_NAME=emby-proxy-core # 这个名字必须和下面 proxy 服务的 container_name 完全一致
-      - PROXY_CORE_URL=http://emby-proxy-core:8999
-    restart: unless-stopped
-
-  proxy:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: emby-proxy-core # admin 服务将通过这个名字来重启此容器
-    command: ["python", "src/main.py", "proxy"]
-    ports:
       - "8999:8999"
     volumes:
       - ./config:/app/config
-      - ./generated_covers:/app/generated_covers
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PROXY_CONTAINER_NAME=emby-proxy
+      - PROXY_CORE_URL=http://localhost:8999
     restart: unless-stopped
-    # depends_on 在这里很好，表示 proxy 启动前会先尝试启动 admin
-    depends_on:
-      - admin

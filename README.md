@@ -9,6 +9,14 @@
 
 ---
 
+### 🏗️ [1.3.0] - 2025-08-10
+- **架构升级**:
+    - **部署模式简化**: 将原有的 `admin` 和 `proxy` 双容器架构，重构为使用 `supervisor` 管理的单容器架构。
+    - **简化部署**: 更新了 `docker-compose.yml`，现在只需管理单个服务，部署和维护流程更简单。
+    - **文档同步**: 同步更新了 `README.md` 中的快速开始指南，以匹配新的单容器部署模式。
+
+---
+
 ### ✨ [1.2.0] - 2025-08-10
 - **新功能**:
     - **多种封面样式**: 手动生成封面时，现在可以在三种不同的内置样式（一种多图、两种单图）中自由选择。
@@ -50,34 +58,28 @@
 3.  将以下内容复制并粘贴到 `docker-compose.yml` 文件中：
 
     ```yaml
-    services:
-      # Admin 服务 (管理后台)
-      admin:
-        image: pipi20xx/emby-virtual-proxy
-        container_name: emby-proxy-admin
-        command: ["python", "src/main.py", "admin"]
-        ports:
-          - "8011:8001" # 将管理后台的8001端口映射到主机的8011端口
-        volumes:
-          - ./config:/app/config # 挂载配置文件目录，确保数据持久化
-          - /var/run/docker.sock:/var/run/docker.sock # 挂载Docker sock，允许后台重启代理服务
-        restart: unless-stopped
-        environment:
-          # 这个名字必须和下面 proxy 服务的 container_name 完全一致
-          - PROXY_CONTAINER_NAME=emby-proxy-core 
+    version: '3.8'
 
-      # Proxy 服务 (代理核心)
-      proxy:
+    services:
+      emby-proxy:
         image: pipi20xx/emby-virtual-proxy
-        container_name: emby-proxy-core
-        command: ["python", "src/main.py", "proxy"]
+        container_name: emby-proxy
         ports:
-          - "8999:8999" # 代理核心端口
+          # 管理后台端口，左边为主机端口，右边为容器端口
+          - "8011:8001"
+          # 代理核心端口，左边为主机端口，右边为容器端口
+          - "8999:8999"
         volumes:
-          - ./config:/app/config # 代理服务也需要读取配置
+          # 挂载配置文件和生成的封面目录，确保数据持久化
+          - ./config:/app/config
+          # 挂载Docker sock，允许后台通过API重启服务
+          - /var/run/docker.sock:/var/run/docker.sock
+        environment:
+          # 环境变量：告诉管理服务要重启的容器名（即自身）
+          - PROXY_CONTAINER_NAME=emby-proxy
+          # 环境变量：告诉管理服务如何访问同一容器内的代理服务
+          - PROXY_CORE_URL=http://localhost:8999
         restart: unless-stopped
-        depends_on:
-          - admin
     ```
 
 4.  在 `docker-compose.yml` 文件所在的目录中，运行以下命令启动服务：

@@ -31,5 +31,8 @@ COPY --from=frontend-builder /app/frontend/dist /app/static
 EXPOSE 8001
 EXPOSE 8999
 
-# 关键改动：更新默认启动命令的路径
-CMD ["python", "src/main.py"]
+# 新增：复制 supervisord 配置文件
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# 修改：使用 supervisord 启动服务
+CMD ["/usr/local/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
