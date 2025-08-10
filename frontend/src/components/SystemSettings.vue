@@ -45,6 +45,19 @@
 
       <el-divider />
 
+      <el-form-item label="自动生成封面默认样式">
+        <el-select v-model="store.config.default_cover_style" placeholder="请选择默认样式" style="width: 100%;">
+          <el-option label="样式一 (多图)" value="style_multi_1"></el-option>
+          <el-option label="样式二 (单图)" value="style_single_1"></el-option>
+          <el-option label="样式三 (单图)" value="style_single_2"></el-option>
+        </el-select>
+        <div class="form-item-description">
+          此处选择的样式，将作为触发封面“自动生成”时的默认样式。您仍然可以在编辑虚拟库时手动选择其他样式生成。
+        </div>
+      </el-form-item>
+
+      <el-divider />
+
       <el-form-item label="全局隐藏类型">
         <el-select
           v-model="store.config.hide"

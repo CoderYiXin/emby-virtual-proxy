@@ -131,10 +131,10 @@ export const useMainStore = defineStore('main', {
         }
     },
     
-    async generateLibraryCover(libraryId, libraryName, titleEn) {
+    async generateLibraryCover(libraryId, libraryName, titleEn, styleName) {
         this.coverGenerating = true;
         try {
-            const response = await api.generateCover(libraryId, libraryName, titleEn);
+            const response = await api.generateCover(libraryId, libraryName, titleEn, styleName);
             if (response.data && response.data.success) {
                 ElMessage.success("封面已在后台生成！请点击保存。");
                 const newImageTag = response.data.image_tag;

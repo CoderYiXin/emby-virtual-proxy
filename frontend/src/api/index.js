@@ -31,5 +31,10 @@ export default {
     saveAdvancedFilters: (filters) => apiClient.post('/advanced-filters', filters),
 
     // 新增: Cover Generator
-    generateCover: (libraryId, libraryName, titleEn) => apiClient.post('/generate-cover', { library_id: libraryId, library_name: libraryName, title_en: titleEn }),
+    generateCover: (libraryId, libraryName, titleEn, styleName) => apiClient.post('/generate-cover', { 
+        library_id: libraryId, 
+        library_name: libraryName, 
+        title_en: titleEn,
+        style_name: styleName 
+    }),
 };

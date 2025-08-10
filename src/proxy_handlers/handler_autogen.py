@@ -12,9 +12,10 @@ from pathlib import Path
 from io import BytesIO
 from PIL import Image
 import aiohttp
+import importlib
 
 import config_manager
-from cover_generator import style_multi_1
+# from cover_generator import style_multi_1 # 改为动态导入
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +115,38 @@ async def generate_poster_in_background(library_id: str, user_id: str, api_key: 
             logger.error(f"后台任务：为库 {library_id} 下载封面素材失败。")
             return
 
-        # ... (生成海报、保存、更新配置的逻辑保持不变) ...
+        # --- 动态调用所选的默认样式 ---
+        style_name = config.default_cover_style
+        logger.info(f"后台任务：使用默认样式 '{style_name}' 为 '{vlib.name}' 生成封面...")
+
+        try:
+            style_module = importlib.import_module(f"cover_generator.{style_name}")
+            create_function = getattr(style_module, f"create_{style_name}")
+        except (ImportError, AttributeError) as e:
+            logger.error(f"后台任务：无法加载样式 '{style_name}': {e}")
+            return
+
         zh_font_path = "/app/src/assets/fonts/multi_1_zh.ttf"
         en_font_path = "/app/src/assets/fonts/multi_1_en.otf"
-        res_b64 = style_multi_1.create_style_multi_1(
-            library_dir=str(temp_dir), title=(vlib.name, ""), font_path=(zh_font_path, en_font_path)
-        )
+        
+        kwargs = {
+            "title": (vlib.name, ""),
+            "font_path": (zh_font_path, en_font_path)
+        }
+
+        if style_name == 'style_multi_1':
+            kwargs['library_dir'] = str(temp_dir)
+        elif style_name in ['style_single_1', 'style_single_2']:
+            main_image_path = temp_dir / "1.jpg"
+            if not main_image_path.is_file():
+                logger.error(f"后台任务：无法找到用于单图模式的主素材图片 (1.jpg)。")
+                return
+            kwargs['image_path'] = str(main_image_path)
+        else:
+            logger.error(f"后台任务：未知的默认样式名称: {style_name}")
+            return
+
+        res_b64 = create_function(**kwargs)
         if not res_b64:
             logger.error(f"后台任务：为库 {library_id} 调用封面生成函数失败。")
             return

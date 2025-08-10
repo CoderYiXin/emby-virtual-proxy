@@ -83,6 +83,14 @@
          <el-input v-model="coverTitleEn" placeholder="可选，用于封面上的英文装饰文字"></el-input>
       </el-form-item>
 
+      <el-form-item label="封面样式">
+        <el-select v-model="selectedStyle" placeholder="请选择样式">
+          <el-option label="样式一 (多图)" value="style_multi_1"></el-option>
+          <el-option label="样式二 (单图)" value="style_single_1"></el-option>
+          <el-option label="样式三 (单图)" value="style_single_2"></el-option>
+        </el-select>
+      </el-form-item>
+
       <el-form-item>
          <el-button 
             type="primary" 
@@ -119,6 +127,7 @@ const store = useMainStore();
 const resourceLoading = ref(false);
 const availableResources = ref([]);
 const coverTitleEn = ref('');
+const selectedStyle = ref('style_multi_1'); // 新增：用于存储所选样式
 
 const coverImageUrl = computed(() => {
   if (store.currentLibrary?.image_tag) {
@@ -173,7 +182,8 @@ const searchResource = async (query) => {
 };
 
 const handleGenerateCover = async () => {
-    const success = await store.generateLibraryCover(store.currentLibrary.id, store.currentLibrary.name, coverTitleEn.value);
+    // 将所选样式传递给 store action
+    const success = await store.generateLibraryCover(store.currentLibrary.id, store.currentLibrary.name, coverTitleEn.value, selectedStyle.value);
     // 成功后，store.currentLibrary.image_tag 会被更新，computed 属性 coverImageUrl 会自动重新计算
 }
 
@@ -181,6 +191,7 @@ const handleGenerateCover = async () => {
 watch(() => store.dialogVisible, (newVal) => {
   if (newVal) {
     coverTitleEn.value = ''; // 重置英文标题输入
+    selectedStyle.value = 'style_multi_1'; // 重置样式选择
     const resourceType = store.currentLibrary.resource_type;
     const resourceId = store.currentLibrary.resource_id;
 

@@ -52,6 +52,9 @@ class AppConfig(BaseModel):
 
     # 新增：缓存开关
     enable_cache: bool = Field(default=True)
+    
+    # 新增：自动生成封面的默认样式
+    default_cover_style: str = Field(default='style_multi_1')
 
     class Config:
         # 允许从别名填充模型

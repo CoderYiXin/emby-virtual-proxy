@@ -16,8 +16,9 @@ import hashlib
 import time
 from typing import List, Dict, Optional
 from pydantic import BaseModel
+import importlib
 # 导入封面生成模块
-from cover_generator import style_multi_1
+# from cover_generator import style_multi_1 # 改为动态导入
 import base64
 from PIL import Image
 from io import BytesIO
@@ -45,6 +46,8 @@ class CoverRequest(BaseModel):
     library_id: str
     library_name: str
     title_en: Optional[str] = None
+    style_name: str # 新增：用于指定封面样式
+
 # --- 高级筛选器 API ---
 @api_router.get("/advanced-filters", response_model=List[AdvancedFilter], tags=["Advanced Filters"])
 async def get_advanced_filters():
@@ -263,8 +266,8 @@ async def restart_proxy_container():
 @api_router.post("/generate-cover", tags=["Cover Generator"])
 async def generate_cover(body: CoverRequest):
     try:
-        # 调用核心生成逻辑
-        image_tag = await _generate_library_cover(body.library_id, body.library_name, body.title_en)
+        # 调用核心生成逻辑，并传递样式名称
+        image_tag = await _generate_library_cover(body.library_id, body.library_name, body.title_en, body.style_name)
         if image_tag:
             # 成功后，需要找到对应的虚拟库并更新其 image_tag
             config = config_manager.load_config()
@@ -286,7 +289,7 @@ async def generate_cover(body: CoverRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 # 封面生成的核心逻辑
-async def _generate_library_cover(library_id: str, library_name: str, title_en: Optional[str] = None) -> Optional[str]:
+async def _generate_library_cover(library_id: str, library_name: str, title_en: Optional[str], style_name: str) -> Optional[str]:
     config = config_manager.load_config()
     # --- 1. 定义路径 ---
     FONT_DIR = "/app/src/assets/fonts/"
@@ -294,9 +297,6 @@ async def _generate_library_cover(library_id: str, library_name: str, title_en: 
     
     Path(OUTPUT_DIR).mkdir(exist_ok=True)
     
-    zh_font_path = os.path.join(FONT_DIR, "multi_1_zh.ttf")
-    en_font_path = os.path.join(FONT_DIR, "multi_1_en.otf")
-
     # 创建一个唯一的临时目录来存放下载的素材
     image_gen_dir = Path(OUTPUT_DIR) / f"temp_{str(uuid.uuid4())}"
     image_gen_dir.mkdir()
@@ -305,17 +305,45 @@ async def _generate_library_cover(library_id: str, library_name: str, title_en: 
         # --- 2. 【核心改动】: 从虚拟库下载图片素材 ---
         await _fetch_images_from_vlib(library_id, image_gen_dir, config)
 
-        # --- 3. 调用生成函数 ---
-        logger.info(f"素材准备完毕，开始为 '{library_name}' ({library_id}) 生成封面...")
-        res = style_multi_1.create_style_multi_1(
-            library_dir=str(image_gen_dir),
-            title=(library_name, title_en),
-            font_path=(zh_font_path, en_font_path)
-        )
+        # --- 3. 【核心改动】: 动态调用所选的样式生成函数 ---
+        logger.info(f"素材准备完毕，开始使用样式 '{style_name}' 为 '{library_name}' ({library_id}) 生成封面...")
+        
+        try:
+            # 动态导入选择的样式模块
+            style_module = importlib.import_module(f"cover_generator.{style_name}")
+            # 假设每个样式文件都有一个名为 create_... 的主函数
+            create_function_name = f"create_{style_name}" 
+            create_function = getattr(style_module, create_function_name)
+        except (ImportError, AttributeError) as e:
+            logger.error(f"无法加载或找到样式生成函数: {style_name} -> {e}")
+            raise HTTPException(status_code=400, detail=f"无效的样式名称: {style_name}")
+
+        # 【核心修复】: 根据不同的样式，准备不同的参数
+        zh_font_path = os.path.join(FONT_DIR, "multi_1_zh.ttf")
+        en_font_path = os.path.join(FONT_DIR, "multi_1_en.otf")
+        
+        kwargs = {
+            "title": (library_name, title_en),
+            "font_path": (zh_font_path, en_font_path)
+        }
+
+        if style_name == 'style_multi_1':
+            kwargs['library_dir'] = str(image_gen_dir)
+        elif style_name in ['style_single_1', 'style_single_2']:
+            # 单图模式，选择第一张图作为主图
+            main_image_path = image_gen_dir / "1.jpg"
+            if not main_image_path.is_file():
+                raise HTTPException(status_code=404, detail="无法找到用于单图模式的主素材图片 (1.jpg)。")
+            kwargs['image_path'] = str(main_image_path)
+        else:
+            raise HTTPException(status_code=400, detail=f"未知的样式名称: {style_name}")
+
+        # 使用关键字参数解包来调用函数
+        res = create_function(**kwargs)
         
         if not res:
-            logger.error(f"style_multi_1 函数返回失败。")
-            raise HTTPException(status_code=500, detail="封面生成函数内部错误。")
+            logger.error(f"样式函数 {style_name} 返回失败。")
+            raise HTTPException(status_code=500, detail=f"封面生成函数 {style_name} 内部错误。")
 
         # --- 4. 解码、转换并以虚拟库ID为名保存图片 ---
         image_data = base64.b64decode(res)
