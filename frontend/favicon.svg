@@ -1,0 +1,106 @@
+<svg width="600" height="600" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <!-- 黑色背景 -->
+  <rect x="5" y="5" width="190" height="190" rx="15" ry="15" fill="black"/>
+
+  <!-- 白色图标组 -->
+  <g transform="translate(100, 95)" stroke="white" fill="none" stroke-width="1.5">
+
+    <!-- 主齿轮 -->
+    <g stroke-width="2.5">
+      <path d="M 0 -50 L 10 -48 L 13 -40 L 25 -43 L 25 -35 L 38 -32 L 35 -20 L 48 -15 L 45 0 L 48 15 L 35 20 L 38 32 L 25 35 L 25 43 L 13 40 L 10 48 L 0 50 L -10 48 L -13 40 L -25 43 L -25 35 L -38 32 L -35 20 L -48 -15 L -45 0 L -48 -15 L -35 -20 L -38 -32 L -25 -35 L -25 -43 L -13 -40 L -10 -48 Z" fill="black" stroke-linejoin="round"/>
+    </g>
+
+    <!-- 齿轮中心细节 -->
+    <g stroke-width="2">
+      <circle cx="0" cy="0" r="28"/>
+      <path d="M -18 0 A 18 18 0 0 1 18 0" stroke-width="2.2"/>
+      <path d="M -12 -20 A 23 23 0 0 1 12 -20" stroke-width="2.2"/>
+      <circle cx="-15" cy="-15" r="1.5" fill="white" stroke="none"/>
+    </g>
+
+    <!-- 左上扳手 -->
+    <g transform="translate(-55, -35) rotate(-30)" stroke-linecap="round">
+      <path d="M 0 0 C 5 5, 5 10, 0 15 M 5 2 C 8 4, 8 8, 5 11"/>
+      <path d="M 2 7.5 L -10 7.5"/>
+    </g>
+
+    <!-- 左侧线条和圆圈 -->
+    <g transform="translate(-60, 0)">
+      <line x1="0" y1="0" x2="15" y2="0"/>
+      <line x1="0" y1="5" x2="10" y2="5"/>
+      <circle cx="20" cy="2.5" r="2" fill="black"/>
+      <circle cx="5" cy="12" r="1.5" fill="black"/>
+    </g>
+
+    <!-- 左下扳手 -->
+    <g transform="translate(-45, 45)">
+       <path d="M 0 0 C -5 -5, -12 -5, -15 0 C -12 5, -5 5, 0 0 M 12 0 C 17 -5, 24 -5, 27 0 C 24 5, 17 5, 12 0"/>
+       <line x1="0" y1="0" x2="12" y2="0"/>
+       <path d="M 22 5 L 22 -5" stroke-linecap="round"/>
+    </g>
+
+    <!-- 下方小齿轮和元素 -->
+    <g transform="translate(0, 55)">
+      <circle cx="0" cy="0" r="6"/>
+      <circle cx="0" cy="0" r="2" fill="white"/>
+      <g stroke-linecap="round">
+        <line x1="0" y1="6" x2="0" y2="8"/>
+        <line x1="0" y1="-6" x2="0" y2="-8"/>
+        <line x1="6" y1="0" x2="8" y2="0"/>
+        <line x1="-6" y1="0" x2="-8" y2="0"/>
+      </g>
+    </g>
+    <circle cx="15" cy="50" r="2" fill="black"/>
+    <g transform="translate(25, 48)">
+        <line x1="0" y1="0" x2="10" y2="0"/>
+        <line x1="0" y1="4" x2="10" y2="4"/>
+        <line x1="0" y1="8" x2="10" y2="8"/>
+    </g>
+
+    <!-- 右侧小齿轮 -->
+    <g transform="translate(60, -10)" stroke-linecap="round">
+      <circle cx="0" cy="0" r="10"/>
+      <circle cx="0" cy="0" r="4"/>
+      <path d="M 0 10 L 0 12 M 0 -10 L 0 -12 M 10 0 L 12 0 M -10 0 L -12 0 M 7 7 L 8.5 8.5 M -7 -7 L -8.5 -8.5 M 7 -7 L 8.5 -8.5 M -7 7 L -8.5 8.5"/>
+    </g>
+
+    <!-- 右下扳手 -->
+    <g transform="translate(65, 25) rotate(30)">
+       <rect x="-3" y="-3" width="6" height="12" rx="2"/>
+       <line x1="0" y1="9" x2="0" y2="15"/>
+    </g>
+    <circle cx="68" cy="45" r="1.5" fill="black"/>
+
+    <!-- 右下角图标 -->
+    <g transform="translate(55, 60)">
+        <rect x="-6" y="-6" width="12" height="12" transform="rotate(45)"/>
+        <circle cx="0" cy="0" r="2" fill="white" stroke="none"/>
+    </g>
+
+    <!-- 右上角“火箭”和线条 -->
+    <g transform="translate(45, -40)" stroke-linecap="round">
+      <path d="M 0 0 L 10 0 L 15 -3 L 10 -6 L 0 -6 Z" stroke-linejoin="round"/>
+      <path d="M -2 0 L -8 0 M -2 -6 L -8 -6" stroke-dasharray="3 2"/>
+      <circle cx="18" cy="2" r="1.5" fill="black"/>
+    </g>
+
+    <!-- 左上角线条和箭头 -->
+    <g transform="translate(-30, -50)" stroke-linecap="round">
+        <line x1="0" y1="0" x2="-15" y2="0"/>
+        <line x1="0" y1="5" x2="-10" y2="5"/>
+        <path d="M 5 0 L 0 -5 L -5 0" stroke-linejoin="round" transform="translate(0, -3)"/>
+    </g>
+
+    <!-- 左下角连接元素 -->
+    <g transform="translate(-65, 25)">
+       <path d="M 0 0 C 5 0, 5 10, 0 10"/>
+       <circle cx="-3" cy="5" r="3"/>
+    </g>
+
+    <!-- 顶部小齿轮 -->
+    <g transform="translate(0, -60)" stroke-linecap="round">
+      <circle cx="0" cy="0" r="7"/>
+      <path d="M 0 7 L 0 8 M 0 -7 L 0 -8 M 7 0 L 8 0 M -7 0 L -8 0 M 5 5 L 6 6 M -5 -5 L -6 -6 M 5 -5 L 6 -6 M -5 5 L -6 6"/>
+    </g>
+  </g>
+</svg>
