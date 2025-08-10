@@ -288,6 +288,31 @@ async def generate_cover(body: CoverRequest):
         print(f"[COVER-GEN-ERROR] 封面生成过程中发生异常: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.post("/covers/clear", status_code=204, tags=["Cover Generator"])
+async def clear_all_covers():
+    """清空所有生成的封面图并重置配置中的 image_tag"""
+    covers_dir = Path("/app/config/images")
+    logger.info(f"开始清空封面目录: {covers_dir}")
+    try:
+        if covers_dir.is_dir():
+            for item in covers_dir.iterdir():
+                if item.is_dir():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+        
+        # 重置配置
+        config = config_manager.load_config()
+        for vlib in config.virtual_libraries:
+            vlib.image_tag = None
+        config_manager.save_config(config)
+        
+        logger.info("所有封面及配置已成功清除。")
+        return Response(status_code=204)
+    except Exception as e:
+        logger.error(f"清空封面时出错: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"清空封面时发生内部错误: {e}")
+
 # 封面生成的核心逻辑
 async def _generate_library_cover(library_id: str, library_name: str, title_en: Optional[str], style_name: str) -> Optional[str]:
     config = config_manager.load_config()

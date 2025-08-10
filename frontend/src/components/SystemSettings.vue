@@ -58,6 +58,25 @@
 
       <el-divider />
 
+      <el-form-item label="危险区域">
+        <el-popconfirm
+            title="确定要清空所有本地生成的封面吗？"
+            width="280"
+            confirm-button-text="确定清空"
+            cancel-button-text="取消"
+            @confirm="store.clearAllCovers()"
+        >
+            <template #reference>
+                <el-button type="danger" :loading="store.saving">清空所有本地封面</el-button>
+            </template>
+        </el-popconfirm>
+        <div class="form-item-description">
+          此操作将删除 `config/images` 目录下的所有图片和临时文件，并重置所有虚拟库的封面状态。此操作不可逆。
+        </div>
+      </el-form-item>
+
+      <el-divider />
+
       <el-form-item label="全局隐藏类型">
         <el-select
           v-model="store.config.hide"

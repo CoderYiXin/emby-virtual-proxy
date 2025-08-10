@@ -238,7 +238,22 @@ export const useMainStore = defineStore('main', {
         } finally {
             this.saving = false;
         }
-    },    
+    },
+
+    async clearAllCovers() {
+        this.saving = true;
+        try {
+            await api.clearCovers();
+            ElMessage.success("所有本地封面已清空！");
+            // 刷新配置以更新UI（清除image_tag）
+            await this._reloadConfigAndAllLibs();
+        } catch (error) {
+            this._handleApiError(error, "清空封面失败");
+        } finally {
+            this.saving = false;
+        }
+    },
+    
     async saveConfig() {
         this.saving = true;
         try {

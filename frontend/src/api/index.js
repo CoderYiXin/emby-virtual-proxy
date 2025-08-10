@@ -37,4 +37,5 @@ export default {
         title_en: titleEn,
         style_name: styleName 
     }),
+    clearCovers: () => apiClient.post('/covers/clear'),
 };
