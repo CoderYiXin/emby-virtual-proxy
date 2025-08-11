@@ -149,11 +149,7 @@ async def handle_virtual_library_items(
     # 【【【核心优化点 3】】】: 处理合并的特殊情况
     # 如果启用了TMDB合并，我们需要获取一个更大的数据集来进行有效的合并，然后再在代理端进行分页。
     # 这是一种混合模式，仍然远比获取所有项目要高效。
-    if found_vlib.merge_by_tmdb_id:
-        logger.info("TMDB合并已启用，将临时移除客户端分页参数，以获取更大数据集进行合并。")
-        new_params.pop("StartIndex", None)
-        # 获取一个较大的集合，例如200个，作为合并的基础
-        new_params["Limit"] = "200" 
+    is_tmdb_merge_enabled = found_vlib.merge_by_tmdb_id
 
     target_emby_api_path = f"Users/{user_id}/Items"
     search_url = f"{real_emby_url}/emby/{target_emby_api_path}"
@@ -169,57 +165,114 @@ async def handle_virtual_library_items(
     }
     
     logger.debug(f"向真实 Emby 发起优化后的最终请求: URL={search_url}, Params={new_params}")
-    async with session.request(method, search_url, params=new_params, headers=headers_to_forward) as resp:
-        if resp.status != 200:
-             content = await resp.read(); return Response(content=content, status_code=resp.status, headers=resp.headers)
-        
-        content = await resp.read()
-        response_headers = {k: v for k, v in resp.headers.items() if k.lower() not in ('transfer-encoding', 'connection', 'content-encoding', 'content-length')}
-        
-        if "application/json" in resp.headers.get("Content-Type", ""):
-            try:
-                data = json.loads(content)
-                items_list = data.get("Items", [])
-                
-                # 1. 应用后筛选 (如果需要)
-                if post_filter_rules:
-                    items_list = _apply_post_filter(items_list, post_filter_rules)
 
-                # 2. 应用TMDB合并 (如果需要)
-                if found_vlib.merge_by_tmdb_id:
-                    logger.info("正在对获取到的数据集执行TMDB合并...")
-                    items_list = await handler_merger.merge_items_by_tmdb(items_list)
-                    
-                    # 3. 对合并和筛选后的结果，在代理端进行手动分页
-                    total_record_count = len(items_list)
-                    start_idx = int(client_start_index)
-                    limit_count = int(client_limit)
-                    paginated_items = items_list[start_idx : start_idx + limit_count]
-                    
-                    data["Items"] = paginated_items
-                    data["TotalRecordCount"] = total_record_count
-                    logger.info(f"合并后手动分页完成。总数: {total_record_count}, 返回页面项目数: {len(paginated_items)}")
+    # 如果不启用TMDB合并，或者有无法翻译的后筛选规则，则走常规分页逻辑
+    if not is_tmdb_merge_enabled or post_filter_rules:
+        if is_tmdb_merge_enabled and post_filter_rules:
+            logger.warning("TMDB合并已启用，但存在无法翻译的后筛选规则，合并将在当前页进行，可能不完整。")
 
-                else:
-                    # 如果不合并，Emby返回的就是最终分页结果，只需更新Items（因为可能有后筛选）
+        async with session.request(method, search_url, params=new_params, headers=headers_to_forward) as resp:
+            if resp.status != 200:
+                content = await resp.read()
+                return Response(content=content, status_code=resp.status, headers=resp.headers)
+            
+            content = await resp.read()
+            response_headers = {k: v for k, v in resp.headers.items() if k.lower() not in ('transfer-encoding', 'connection', 'content-encoding', 'content-length')}
+            
+            if "application/json" in resp.headers.get("Content-Type", ""):
+                try:
+                    data = json.loads(content)
+                    items_list = data.get("Items", [])
+                    
+                    if post_filter_rules:
+                        items_list = _apply_post_filter(items_list, post_filter_rules)
+                    
+                    if is_tmdb_merge_enabled:
+                        logger.info("正在对当前页的数据集执行TMDB合并...")
+                        items_list = await handler_merger.merge_items_by_tmdb(items_list)
+                    
                     data["Items"] = items_list
-                    # TotalRecordCount 使用Emby返回的，虽然可能因后筛选而不完全精确，但这是效率的权衡
-                    logger.info(f"原生筛选完成。Emby返回总数: {data.get('TotalRecordCount')}, 当前页项目数: {len(items_list)}")
+                    logger.info(f"原生筛选/合并完成。Emby返回总数: {data.get('TotalRecordCount')}, 当前页项目数: {len(items_list)}")
+                    
+                    final_items_to_return = data.get("Items", [])
+                    if final_items_to_return:
+                        vlib_items_cache[found_vlib.id] = final_items_to_return
+                        logger.info(f"✅ 已为虚拟库 '{found_vlib.name}' 缓存 {len(final_items_to_return)} 个项目以供封面生成使用。")
+                    
+                    content = json.dumps(data).encode('utf-8')
+                except (json.JSONDecodeError, Exception) as e:
+                    logger.error(f"处理响应时发生错误: {e}")
 
-                final_items_to_return = data.get("Items", [])
-                if final_items_to_return:
-                    # 我们缓存的是处理过的、分页后的当前页数据。
-                    # 对于生成封面来说，这通常已经足够（随机取9个）。
-                    # 如果需要更多，可以考虑缓存未分页前的数据 `items_list`。
-                    # 为了简单起见，我们先缓存最终结果。
-                    vlib_items_cache[found_vlib.id] = final_items_to_return
-                    logger.info(f"✅ 已为虚拟库 '{found_vlib.name}' 缓存 {len(final_items_to_return)} 个项目以供封面生成使用。")
-                # 【【【 缓存逻辑结束 】】】
+            return Response(content=content, status_code=resp.status, headers=response_headers)
 
-                content = json.dumps(data).encode('utf-8')
-            except (json.JSONDecodeError, Exception) as e:
-                logger.error(f"处理响应时发生错误: {e}")
+    # --- TMDB合并的全量获取逻辑 ---
+    else:
+        logger.info("TMDB合并已启用，开始获取全量数据...")
+        all_items = []
+        start_index = 0
+        limit = 200  # 每次请求200个
+        
+        # 移除客户端的分页参数，因为我们要自己控制
+        new_params.pop("StartIndex", None)
+        new_params.pop("Limit", None)
+        
+        while True:
+            fetch_params = new_params.copy()
+            fetch_params["StartIndex"] = str(start_index)
+            fetch_params["Limit"] = str(limit)
+            
+            logger.debug(f"正在获取批次: StartIndex={start_index}, Limit={limit}")
+            async with session.request(method, search_url, params=fetch_params, headers=headers_to_forward) as resp:
+                if resp.status != 200:
+                    logger.error(f"获取批次失败，状态码: {resp.status}")
+                    # 返回错误或一个空的成功响应
+                    return Response(content=json.dumps({"Items": [], "TotalRecordCount": 0}), status_code=200, media_type="application/json")
 
-        return Response(content=content, status_code=resp.status, headers=response_headers)
+                batch_data = await resp.json()
+                batch_items = batch_data.get("Items", [])
+                
+                if not batch_items:
+                    logger.info("已获取所有数据。")
+                    break
+                
+                all_items.extend(batch_items)
+                start_index += len(batch_items)
+                
+                # 如果返回的项目数小于请求的limit，说明是最后一页
+                if len(batch_items) < limit:
+                    logger.info("已到达最后一页。")
+                    break
+        
+        logger.info(f"全量数据获取完成，总共 {len(all_items)} 个项目。")
+
+        # 1. 应用TMDB合并
+        logger.info("正在对获取到的全量数据集执行TMDB合并...")
+        merged_items = await handler_merger.merge_items_by_tmdb(all_items)
+        
+        # 2. 对合并后的结果进行手动分页
+        total_record_count = len(merged_items)
+        start_idx = int(client_start_index)
+        limit_count = int(client_limit)
+        paginated_items = merged_items[start_idx : start_idx + limit_count]
+        
+        # 3. 构建最终的响应
+        final_data = {
+            "Items": paginated_items,
+            "TotalRecordCount": total_record_count,
+            "StartIndex": start_idx
+        }
+        logger.info(f"合并后手动分页完成。总数: {total_record_count}, 返回页面项目数: {len(paginated_items)}")
+
+        if paginated_items:
+            vlib_items_cache[found_vlib.id] = paginated_items
+            logger.info(f"✅ 已为虚拟库 '{found_vlib.name}' 缓存 {len(paginated_items)} 个项目以供封面生成使用。")
+
+        content = json.dumps(final_data).encode('utf-8')
+        # 伪造一个成功的响应头
+        response_headers = {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Content-Length': str(len(content))
+        }
+        return Response(content=content, status_code=200, headers=response_headers)
 
     return None
