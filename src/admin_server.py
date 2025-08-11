@@ -458,6 +458,12 @@ async def update_library(library_id: str, updated_library_data: VirtualLibrary):
     # .model_dump(exclude_unset=True) 只获取客户端实际发送过来的字段
     update_data = updated_library_data.model_dump(exclude_unset=True)
     
+    # 【核心修复】在更新前，手动保留旧的 image_tag
+    if lib_to_update.image_tag:
+        # 如果客户端传来的数据中没有 image_tag，或者为 null，我们强制使用旧的
+        if 'image_tag' not in update_data or not update_data['image_tag']:
+            update_data['image_tag'] = lib_to_update.image_tag
+
     # 使用 Pydantic 的 model_copy 方法安全地更新模型
     updated_lib = lib_to_update.model_copy(update=update_data)
     
