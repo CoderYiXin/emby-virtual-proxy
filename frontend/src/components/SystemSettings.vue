@@ -35,6 +35,40 @@
 
       <el-divider />
 
+      <!-- 【【【 新增：访问控制 】】】 -->
+      <el-form-item label="启用访问控制">
+        <el-switch v-model="store.config.enable_access_control" />
+        <div class="form-item-description">
+          开启后，下方配置的密码或 API 密钥白名单才会生效。
+        </div>
+      </el-form-item>
+
+      <el-form-item label="访问密码" v-if="store.config.enable_access_control">
+        <el-input 
+          v-model="store.config.proxy_password" 
+          type="password"
+          show-password
+          placeholder="留空则禁用浏览器密码访问"
+        />
+        <div class="form-item-description">
+          为代理服务设置一个访问密码。设置后，通过浏览器访问需要先输入此密码。
+        </div>
+      </el-form-item>
+
+      <el-form-item label="API密钥白名单" v-if="store.config.enable_access_control">
+        <el-input
+          v-model="authorizedKeysText"
+          type="textarea"
+          :rows="4"
+          placeholder="每行一个 API 密钥"
+        />
+        <div class="form-item-description">
+          允许手机、电视等客户端通过这些 API 密钥直接访问，无需输入密码。请在 Emby 后台 -> API 密钥 中查找。
+        </div>
+      </el-form-item>
+
+      <el-divider />
+
       <!-- 【【【 新增：缓存开关 】】】 -->
       <el-form-item label="启用内存缓存">
         <el-switch v-model="store.config.enable_cache" />
@@ -104,10 +138,22 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useMainStore } from '@/stores/main';
 
 const store = useMainStore();
+
+// Helper to convert between array and newline-separated string for the textarea
+const authorizedKeysText = computed({
+  get() {
+    // Ensure the array exists before joining
+    return store.config.authorized_api_keys ? store.config.authorized_api_keys.join('\n') : '';
+  },
+  set(value) {
+    // Split by newline and filter out any empty lines
+    store.config.authorized_api_keys = value.split('\n').filter(key => key.trim() !== '');
+  }
+});
 
 const collectionTypes = ref([
   { value: 'movies', label: '电影 (movies)' },

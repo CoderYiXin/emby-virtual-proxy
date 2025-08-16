@@ -36,6 +36,9 @@ class VirtualLibrary(BaseModel):
 class AppConfig(BaseModel):
     emby_url: str = Field(default="http://127.0.0.1:8096")
     emby_api_key: Optional[str] = Field(default="")
+    enable_access_control: bool = Field(default=False)
+    proxy_password: Optional[str] = Field(default=None)
+    authorized_api_keys: List[str] = Field(default_factory=list)
     log_level: Literal["debug", "info", "warn", "error"] = Field(default="info")
     display_order: List[str] = Field(default_factory=list)
     hide: List[str] = Field(default_factory=list)

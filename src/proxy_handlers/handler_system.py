@@ -36,22 +36,22 @@ async def handle_system_and_playback_info(
             # 如果请求失败，让默认处理器来处理
             return None
 
-    # 关键功能 2: 重写播放信息中的地址
-    if "/PlaybackInfo" in full_path:
-        logger.info(f"Intercepting /PlaybackInfo to rewrite stream URLs for path: {full_path}")
-        async with session.request(method, target_url, params=params, headers=headers, data=data) as resp:
-            if resp.status == 200 and "application/json" in resp.headers.get("Content-Type", ""):
-                content_json = await resp.json()
-                if "MediaSources" in content_json and isinstance(content_json["MediaSources"], list):
-                    for source in content_json["MediaSources"]:
-                        for key, value in source.items():
-                            if isinstance(value, str) and real_emby_url in value:
-                                source[key] = value.replace(real_emby_url, proxy_address)
+    # 关键功能 2: 重写播放信息中的地址 (已禁用)
+    # if "/PlaybackInfo" in full_path:
+    #     logger.info(f"Intercepting /PlaybackInfo to rewrite stream URLs for path: {full_path}")
+    #     async with session.request(method, target_url, params=params, headers=headers, data=data) as resp:
+    #         if resp.status == 200 and "application/json" in resp.headers.get("Content-Type", ""):
+    #             content_json = await resp.json()
+    #             if "MediaSources" in content_json and isinstance(content_json["MediaSources"], list):
+    #                 for source in content_json["MediaSources"]:
+    #                     for key, value in source.items():
+    #                         if isinstance(value, str) and real_emby_url in value:
+    #                             source[key] = value.replace(real_emby_url, proxy_address)
                 
-                final_content = json.dumps(content_json).encode('utf-8')
-                response_headers = {k: v for k, v in resp.headers.items() if k.lower() not in ('transfer-encoding', 'connection', 'content-encoding', 'content-length')}
-                return Response(content=final_content, status_code=resp.status, media_type="application/json")
-            # 如果不是我们关心的类型，让默认处理器来处理
-            return None
+    #             final_content = json.dumps(content_json).encode('utf-8')
+    #             response_headers = {k: v for k, v in resp.headers.items() if k.lower() not in ('transfer-encoding', 'connection', 'content-encoding', 'content-length')}
+    #             return Response(content=final_content, status_code=resp.status, media_type="application/json")
+    #         # 如果不是我们关心的类型，让默认处理器来处理
+    #         return None
             
     return None # 此处理器不处理该请求
