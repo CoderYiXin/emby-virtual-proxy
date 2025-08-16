@@ -9,9 +9,6 @@ export const useMainStore = defineStore('main', {
     config: { 
         emby_url: '', 
         emby_api_key: '', 
-        enable_access_control: false,
-        proxy_password: '',
-        authorized_api_keys: [],
         hide: [], 
         display_order: [], 
         advanced_filters: [],
@@ -80,8 +77,6 @@ export const useMainStore = defineStore('main', {
         this.config = configRes.data;
         if (!this.config.advanced_filters) this.config.advanced_filters = [];
         if (!this.config.library) this.config.library = []; // 确保 library 数组存在
-        if (!this.config.authorized_api_keys) this.config.authorized_api_keys = []; //确保数组存在
-        if (this.config.enable_access_control === undefined) this.config.enable_access_control = false; //确保开关存在
 
         this.originalConfigForComparison = JSON.parse(JSON.stringify(configRes.data));
         this.classifications = classificationsRes.data;

@@ -23,8 +23,7 @@ from proxy_handlers import (
     handler_default,
     handler_latest,
     handler_images,
-    handler_virtual_items,
-    handler_auth
+    handler_virtual_items
 )
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -139,11 +138,6 @@ async def reverse_proxy(request: Request, full_path: str):
     session = request.app.state.aiohttp_session
     response = None
 
-    # Authentication handlers
-    if not response: response = await handler_auth.handle_login_page(request, full_path)
-    if not response: response = await handler_auth.handle_verify_password(request, full_path, config)
-    if not response: response = await handler_auth.handle_auth(request, full_path, config)
-    
     if not response: response = await handler_images.handle_virtual_library_image(request, full_path)
     if not response: response = await handler_virtual_items.handle_get_virtual_item_info(request, full_path, config)
     if not response: response = await handler_latest.handle_home_latest_items(request, full_path, request.method, real_emby_url, session, config)
