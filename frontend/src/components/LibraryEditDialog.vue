@@ -13,6 +13,7 @@
       
       <el-form-item label="资源类型" required>
         <el-select v-model="store.currentLibrary.resource_type" @change="store.currentLibrary.resource_id = ''">
+          <el-option label="全库 (All Libraries)" value="all"></el-option>
           <el-option label="合集 (Collection)" value="collection"></el-option>
           <el-option label="标签 (Tag)" value="tag"></el-option>
           <el-option label="类型 (Genre)" value="genre"></el-option>
@@ -21,7 +22,7 @@
         </el-select>
       </el-form-item>
       
-      <el-form-item label="选择资源" required>
+      <el-form-item label="选择资源" required v-if="store.currentLibrary.resource_type !== 'all'">
         <el-select 
           v-model="store.currentLibrary.resource_id"
           filterable
