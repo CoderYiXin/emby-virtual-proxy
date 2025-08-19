@@ -30,6 +30,8 @@ def load_config() -> AppConfig:
                 data['show_missing_episodes'] = False
             if 'tmdb_api_key' not in data:
                 data['tmdb_api_key'] = ""
+            if 'tmdb_proxy' not in data:
+                data['tmdb_proxy'] = ""
             return AppConfig.model_validate(data)
             
     except (json.JSONDecodeError, Exception) as e:

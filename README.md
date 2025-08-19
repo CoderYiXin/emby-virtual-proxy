@@ -21,6 +21,9 @@
     - **支持为缺失剧集自定义占位图**:
         - 所有通过此功能动态添加的缺失剧集，都会显示一个统一的占位图。
         - 您可以通过替换项目路径 `src/assets/images_placeholder/placeholder.jpg` 下的图片文件，来轻松自定义您喜欢的占位图样式（推荐使用16:9比例的图片）。
+    - **新增 TMDB HTTP 代理设置**:
+        - 在“系统设置”中增加了“TMDB HTTP 代理”选项。
+        - 如果您的服务器无法直接访问 The Movie Database，现在可以配置一个 HTTP 代理来确保网络通畅。
 - **修复**:
     - **修复缺失剧集无法显示的问题**: 解决了因构造的缺失剧集数据对象缺少 `ServerId`, `Overview`, `PremiereDate` 等关键字段，而导致 Emby/Jellyfin 客户端拒绝渲染这些项目的问题。
 

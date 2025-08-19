@@ -62,6 +62,9 @@ class AppConfig(BaseModel):
     # 新增：TMDB API Key
     tmdb_api_key: Optional[str] = Field(default="")
 
+    # 新增：TMDB HTTP 代理
+    tmdb_proxy: Optional[str] = Field(default="")
+
     class Config:
         # 允许从别名填充模型
         populate_by_name = True

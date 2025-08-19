@@ -45,6 +45,16 @@
         </div>
       </el-form-item>
 
+      <el-form-item label="TMDB HTTP 代理">
+        <el-input 
+          v-model="store.config.tmdb_proxy"
+          placeholder="例如: http://127.0.0.1:7890"
+        />
+        <div class="form-item-description">
+          如果您的服务器无法直接访问 TMDB API，请在此处填写 HTTP 代理地址。
+        </div>
+      </el-form-item>
+
       <el-divider />
 
       <!-- 【【【 新增：缓存开关 】】】 -->

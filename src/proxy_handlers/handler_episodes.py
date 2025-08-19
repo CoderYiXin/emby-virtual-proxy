@@ -58,6 +58,7 @@ async def handle_episodes_merge(request: Request, full_path: str, session: Clien
     config = load_config()
     show_missing = config.show_missing_episodes
     tmdb_api_key = config.tmdb_api_key
+    tmdb_proxy = config.tmdb_proxy
 
     original_series_ids = await find_all_series_by_tmdb_id(session, real_emby_url, user_id, tmdb_id, headers, auth_token_param)
     
@@ -99,7 +100,7 @@ async def handle_episodes_merge(request: Request, full_path: str, session: Clien
 
     if show_missing:
         logger.info(f"EPISODES_HANDLER: '显示缺失剧集' 已开启，开始从 TMDB 获取信息。")
-        tmdb_episodes = await fetch_tmdb_episodes(session, tmdb_api_key, tmdb_id, target_season_number)
+        tmdb_episodes = await fetch_tmdb_episodes(session, tmdb_api_key, tmdb_id, target_season_number, tmdb_proxy)
         
         if tmdb_episodes:
             # 获取当前剧集信息以用于填充缺失剧集
@@ -138,7 +139,7 @@ async def handle_episodes_merge(request: Request, full_path: str, session: Clien
 
     return Response(content=json.dumps({"Items": final_items, "TotalRecordCount": len(final_items)}), status_code=200, media_type="application/json")
 
-async def fetch_tmdb_episodes(session: ClientSession, api_key: str, tmdb_id: str, season_number: int):
+async def fetch_tmdb_episodes(session: ClientSession, api_key: str, tmdb_id: str, season_number: int, proxy: str | None = None):
     """从TMDB获取指定季的所有集信息"""
     if not api_key:
         logger.warning("TMDB_API_KEY not configured. Skipping TMDB fetch.")
@@ -146,7 +147,7 @@ async def fetch_tmdb_episodes(session: ClientSession, api_key: str, tmdb_id: str
     
     url = f"{TMDB_API_BASE_URL}/tv/{tmdb_id}/season/{season_number}?api_key={api_key}&language=zh-CN"
     try:
-        async with session.get(url) as response:
+        async with session.get(url, proxy=proxy) as response:
             if response.status == 200:
                 data = await response.json()
                 return data.get("episodes", [])
