@@ -67,13 +67,14 @@ async def handle_home_latest_items(
     if not user_id: return None
 
     new_params = {}
-    safe_params_to_inherit = ["Fields", "IncludeItemTypes", "EnableImageTypes", "ImageTypeLimit", "X-Emby-Token", "EnableUserData", "Limit"]
+    safe_params_to_inherit = ["Fields", "IncludeItemTypes", "EnableImageTypes", "ImageTypeLimit", "X-Emby-Token", "EnableUserData", "Limit", "ParentId"]
     for key in safe_params_to_inherit:
         if key in params: new_params[key] = params[key]
 
     new_params["SortBy"] = "DateCreated"
     new_params["SortOrder"] = "Descending"
     new_params["Recursive"] = "true"
+    new_params["IncludeItemTypes"] = "Movie,Series,Video"
     
     post_filter_rules = []
     if found_vlib.advanced_filter_id:
@@ -103,6 +104,12 @@ async def handle_home_latest_items(
     resource_map = {"collection": "CollectionIds", "tag": "TagIds", "person": "PersonIds", "genre": "GenreIds", "studio": "StudioIds"}
     if found_vlib.resource_type in resource_map:
         new_params[resource_map[found_vlib.resource_type]] = found_vlib.resource_id
+    elif found_vlib.resource_type == 'all':
+        # For 'all' type, we don't add any specific resource filter,
+        # which means it will fetch from all libraries.
+        # We also remove ParentId to avoid conflicts.
+        if "ParentId" in new_params:
+            del new_params["ParentId"]
 
     # 采用白名单策略转发所有必要的请求头，确保认证信息不丢失
     headers_to_forward = {

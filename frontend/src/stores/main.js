@@ -154,7 +154,7 @@ export const useMainStore = defineStore('main', {
 
     async saveLibrary() {
       const libraryToSave = this.currentLibrary;
-      if (!libraryToSave.name || !libraryToSave.resource_id) {
+      if (!libraryToSave.name || (libraryToSave.resource_type !== 'all' && !libraryToSave.resource_id)) {
         ElMessage.warning('请填写所有必填字段');
         return;
       }
