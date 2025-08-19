@@ -7,8 +7,11 @@ import re
 from fastapi import Request, Response
 from aiohttp import ClientSession
 from ._find_helper import find_all_series_by_tmdb_id, is_item_in_a_merge_enabled_vlib # <-- 导入新函数
+from config_manager import load_config
 
 logger = logging.getLogger(__name__)
+
+TMDB_API_BASE_URL = "https://api.themoviedb.org/3"
 
 EPISODES_PATH_REGEX = re.compile(r"/Shows/([a-f0-9\-]+)/Episodes")
 
@@ -52,8 +55,16 @@ async def handle_episodes_merge(request: Request, full_path: str, session: Clien
     if not tmdb_id or target_season_number is None: return None
     logger.info(f"EPISODES_HANDLER: 找到TMDB ID: {tmdb_id}，目标季号: {target_season_number}。")
 
+    config = load_config()
+    show_missing = config.show_missing_episodes
+    tmdb_api_key = config.tmdb_api_key
+
     original_series_ids = await find_all_series_by_tmdb_id(session, real_emby_url, user_id, tmdb_id, headers, auth_token_param)
-    if len(original_series_ids) < 2: return None
+    
+    # 如果不显示缺失剧集，并且只有一个库，那么就没必要继续执行了
+    if not show_missing and len(original_series_ids) < 2:
+        return None
+        
     logger.info(f"EPISODES_HANDLER: ✅ 找到 {len(original_series_ids)} 个关联剧集: {original_series_ids}。")
 
     async def fetch_episodes(series_id: str):
@@ -78,12 +89,70 @@ async def handle_episodes_merge(request: Request, full_path: str, session: Clien
     all_episodes = [ep for sublist in await asyncio.gather(*tasks) for ep in sublist]
 
     merged_episodes = {}
+    server_id = None  # 用于存储 ServerId
     for episode in all_episodes:
+        if not server_id:
+            server_id = episode.get("ServerId")  # 从一个真实的剧集中获取 ServerId
         key = episode.get("IndexNumber")
         if key is not None and key not in merged_episodes:
             merged_episodes[key] = episode
-    
+
+    if show_missing:
+        logger.info(f"EPISODES_HANDLER: '显示缺失剧集' 已开启，开始从 TMDB 获取信息。")
+        tmdb_episodes = await fetch_tmdb_episodes(session, tmdb_api_key, tmdb_id, target_season_number)
+        
+        if tmdb_episodes:
+            # 获取当前剧集信息以用于填充缺失剧集
+            series_info_url = f"{real_emby_url}/emby/Users/{user_id}/Items/{series_id_from_path}"
+            series_info_params = {**auth_token_param}
+            async with session.get(series_info_url, params=series_info_params, headers=headers) as resp:
+                series_info = await resp.json()
+
+            for tmdb_episode in tmdb_episodes:
+                episode_number = tmdb_episode.get("episode_number")
+                if episode_number is not None and episode_number not in merged_episodes:
+                    missing_episode = {
+                        "Name": tmdb_episode.get("name"),
+                        "IndexNumber": episode_number,
+                        "SeasonNumber": target_season_number,
+                        "Id": f"tmdb_{tmdb_episode.get('id')}",
+                        "Type": "Episode",
+                        "IsFolder": False,
+                        "UserData": {"Played": False},
+                        "SeriesId": series_id_from_path,
+                        "SeriesName": series_info.get("Name"),
+                        "SeriesPrimaryImageTag": series_info.get("ImageTags", {}).get("Primary"),
+                        "ImageTags": {
+                            "Primary": "placeholder"
+                        },
+                        "PrimaryImageAspectRatio": 1.7777777777777777,
+                        # --- 【【【 新增的关键字段 】】】 ---
+                        "ServerId": server_id,
+                        "Overview": tmdb_episode.get("overview"),
+                        "PremiereDate": tmdb_episode.get("air_date"),
+                    }
+                    merged_episodes[episode_number] = missing_episode
+
     final_items = sorted(merged_episodes.values(), key=lambda x: x.get("IndexNumber", 0))
     logger.info(f"EPISODES_HANDLER: 合并完成。合并前总数: {len(all_episodes)}, 合并后最终数量: {len(final_items)}")
 
     return Response(content=json.dumps({"Items": final_items, "TotalRecordCount": len(final_items)}), status_code=200, media_type="application/json")
+
+async def fetch_tmdb_episodes(session: ClientSession, api_key: str, tmdb_id: str, season_number: int):
+    """从TMDB获取指定季的所有集信息"""
+    if not api_key:
+        logger.warning("TMDB_API_KEY not configured. Skipping TMDB fetch.")
+        return []
+    
+    url = f"{TMDB_API_BASE_URL}/tv/{tmdb_id}/season/{season_number}?api_key={api_key}&language=zh-CN"
+    try:
+        async with session.get(url) as response:
+            if response.status == 200:
+                data = await response.json()
+                return data.get("episodes", [])
+            else:
+                logger.error(f"Error fetching TMDB season details: {response.status}")
+                return []
+    except Exception as e:
+        logger.error(f"Exception fetching TMDB season details: {e}")
+        return []

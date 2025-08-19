@@ -33,6 +33,18 @@
         </div>
       </el-form-item>
 
+      <el-form-item label="TMDB API 密钥">
+        <el-input 
+          v-model="store.config.tmdb_api_key" 
+          type="password"
+          show-password
+          placeholder="请输入您的 TMDB API Key"
+        />
+        <div class="form-item-description">
+          用于从 TMDB 获取缺失的剧集信息。请从 The Movie Database (TMDB) 官网申请。
+        </div>
+      </el-form-item>
+
       <el-divider />
 
       <!-- 【【【 新增：缓存开关 】】】 -->
@@ -40,6 +52,15 @@
         <el-switch v-model="store.config.enable_cache" />
         <div class="form-item-description">
           开启后，代理服务器会缓存 Emby API 的响应以提高性能。关闭后，所有请求都将直接发往 Emby。
+        </div>
+      </el-form-item>
+
+      <el-divider />
+
+      <el-form-item label="显示缺失的剧集">
+        <el-switch v-model="store.config.show_missing_episodes" />
+        <div class="form-item-description">
+          开启后，进入剧集列表时，会自动从 TMDB 查询并显示本地缺失的剧集。
         </div>
       </el-form-item>
 

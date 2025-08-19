@@ -56,6 +56,12 @@ class AppConfig(BaseModel):
     # 新增：自动生成封面的默认样式
     default_cover_style: str = Field(default='style_multi_1')
 
+    # 新增：显示缺失剧集的开关
+    show_missing_episodes: bool = Field(default=False)
+
+    # 新增：TMDB API Key
+    tmdb_api_key: Optional[str] = Field(default="")
+
     class Config:
         # 允许从别名填充模型
         populate_by_name = True

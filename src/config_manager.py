@@ -26,6 +26,10 @@ def load_config() -> AppConfig:
             # --- 核心修复：确保新字段存在以兼容旧配置文件 ---
             if 'advanced_filters' not in data:
                 data['advanced_filters'] = []
+            if 'show_missing_episodes' not in data:
+                data['show_missing_episodes'] = False
+            if 'tmdb_api_key' not in data:
+                data['tmdb_api_key'] = ""
             return AppConfig.model_validate(data)
             
     except (json.JSONDecodeError, Exception) as e:

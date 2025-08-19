@@ -12,10 +12,11 @@ import config_manager
 
 logger = logging.getLogger(__name__)
 
-# 只匹配UUID格式的ID
-IMAGE_PATH_REGEX = re.compile(r"/Items/([a-f0-9\-]{36})/Images/(\w+)")
+# 匹配UUID格式的ID，或者以 "tmdb_" 开头的ID
+IMAGE_PATH_REGEX = re.compile(r"/Items/([a-f0-9\-]{36}|tmdb_\d+)/Images/(\w+)")
 COVERS_DIR = Path("/app/config/images")
 PLACEHOLDER_GENERATING_PATH = Path("/app/src/assets/images_placeholder/generating.jpg")
+PLACEHOLDER_MISSING_PATH = Path("/app/src/assets/images_placeholder/placeholder.jpg")
 
 async def handle_virtual_library_image(request: Request, full_path: str) -> Response | None:
     match = IMAGE_PATH_REGEX.search(f"/{full_path}")
@@ -27,6 +28,15 @@ async def handle_virtual_library_image(request: Request, full_path: str) -> Resp
 
     if image_type != "Primary":
         return None
+
+    # --- 【【【 新增：处理缺失剧集的占位图 】】】 ---
+    image_tag = request.query_params.get("tag")
+    if image_tag == "placeholder":
+        if PLACEHOLDER_MISSING_PATH.is_file():
+            return FileResponse(str(PLACEHOLDER_MISSING_PATH), media_type="image/jpeg")
+        else:
+            return Response(status_code=404)
+    # --- 占位图处理结束 ---
 
     config = config_manager.load_config()
     is_a_virtual_library = any(vlib.id == item_id for vlib in config.virtual_libraries)
