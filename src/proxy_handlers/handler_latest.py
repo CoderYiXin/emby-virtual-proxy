@@ -36,7 +36,66 @@ async def handle_home_latest_items(
     if not parent_id: return None
 
     found_vlib = next((vlib for vlib in config.virtual_libraries if vlib.id == parent_id), None)
-    if not found_vlib: return None
+    if not found_vlib:
+        return None
+
+    # 终极修复：将 UserId 的提取逻辑提前，确保所有分支都能访问到它
+    user_id = params.get("UserId")
+    if not user_id:
+        path_parts_for_user = full_path.split('/')
+        if 'Users' in path_parts_for_user:
+            try:
+                user_id_index = path_parts_for_user.index('Users') + 1
+                if user_id_index < len(path_parts_for_user): user_id = path_parts_for_user[user_id_index]
+            except (ValueError, IndexError): pass
+    if not user_id: return None
+
+    # 如果是 RSS 库，则使用专门的逻辑处理
+    if found_vlib.resource_type == 'rsshub':
+        logger.info(f"HOME_LATEST_HANDLER: Intercepting request for latest items in RSS vlib '{found_vlib.name}'.")
+        
+        from .handler_rss import RssHandler
+        rss_handler = RssHandler()
+        limit = int(request.query_params.get("Limit", 20))
+
+        # 最终修复：完全同步 handler_items.py 中的健壮逻辑
+        latest_items_from_db = rss_handler.rss_library_db.fetchall(
+            "SELECT tmdb_id, media_type, emby_item_id FROM rss_library_items WHERE library_id = ? ORDER BY rowid DESC LIMIT ?",
+            (found_vlib.id, limit)
+        )
+        if not latest_items_from_db:
+            return Response(content=json.dumps([]).encode('utf-8'), status_code=200, headers={"Content-Type": "application/json"})
+
+        existing_emby_ids = [str(item['emby_item_id']) for item in latest_items_from_db if item['emby_item_id']]
+        missing_items_info = [{'tmdb_id': item['tmdb_id'], 'media_type': item['media_type']} for item in latest_items_from_db if not item['emby_item_id']]
+
+        existing_items_data = []
+        server_id = None
+        if existing_emby_ids:
+            existing_items_data = await rss_handler._get_emby_items_by_ids_async(
+                existing_emby_ids, 
+                request_params=request.query_params, 
+                user_id=user_id, 
+                session=session, 
+                real_emby_url=real_emby_url, 
+                request_headers=request.headers
+            )
+            if existing_items_data:
+                server_id = existing_items_data[0].get("ServerId")
+
+        if not server_id:
+            server_id = rss_handler.config.emby_server_id or "emby"
+
+        missing_items_placeholders = []
+        for item_info in missing_items_info:
+            item = rss_handler._get_item_from_tmdb(item_info['tmdb_id'], item_info['media_type'], server_id)
+            if item:
+                missing_items_placeholders.append(item)
+
+        final_items = existing_items_data + missing_items_placeholders
+        
+        content = json.dumps(final_items).encode('utf-8')
+        return Response(content=content, status_code=200, headers={"Content-Type": "application/json"})
 
     logger.info(f"HOME_LATEST_HANDLER: Intercepting request for latest items in vlib '{found_vlib.name}'.")
 
@@ -54,17 +113,6 @@ async def handle_home_latest_items(
             else:
                 logger.warning(f"无法为库 {found_vlib.id} 触发后台任务，因为缺少 UserId 或 ApiKey。")
     # --- 【【【 修正结束 】】】 ---
-
-    # user_id 的获取逻辑后面已经有了，这里不需要重复
-    user_id = params.get("UserId")
-    if not user_id:
-        path_parts_for_user = full_path.split('/')
-        if 'Users' in path_parts_for_user:
-            try:
-                user_id_index = path_parts_for_user.index('Users') + 1
-                if user_id_index < len(path_parts_for_user): user_id = path_parts_for_user[user_id_index]
-            except (ValueError, IndexError): pass
-    if not user_id: return None
 
     new_params = {}
     safe_params_to_inherit = ["Fields", "IncludeItemTypes", "EnableImageTypes", "ImageTypeLimit", "X-Emby-Token", "EnableUserData", "Limit", "ParentId"]
@@ -84,7 +132,8 @@ async def handle_home_latest_items(
             new_params.update(emby_native_params)
             logger.info(f"HOME_LATEST_HANDLER: 应用了 {len(emby_native_params)} 条原生筛选规则。")
     
-    if post_filter_rules or found_vlib.merge_by_tmdb_id:
+    is_tmdb_merge_enabled = found_vlib.merge_by_tmdb_id or config.force_merge_by_tmdb_id
+    if post_filter_rules or is_tmdb_merge_enabled:
         fetch_limit = 200
         client_limit = int(params.get("Limit", 20))
         try: fetch_limit = min(max(client_limit * 10, 50), 200)
@@ -135,7 +184,7 @@ async def handle_home_latest_items(
         if post_filter_rules:
             items_list = _apply_post_filter(items_list, post_filter_rules)
 
-        if found_vlib.merge_by_tmdb_id:
+        if is_tmdb_merge_enabled:
             items_list = await handler_merger.merge_items_by_tmdb(items_list)
 
         client_limit_str = params.get("Limit")

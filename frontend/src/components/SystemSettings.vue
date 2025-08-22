@@ -57,6 +57,15 @@
 
       <el-divider />
 
+      <el-form-item label="RSS 虚拟库定时刷新间隔（小时）">
+        <el-input-number v-model="store.config.rss_refresh_interval" :min="0" />
+        <div class="form-item-description">
+          设置 RSS 虚拟库自动刷新的时间间隔，单位为小时。设置为 0 表示禁用定时刷新。
+        </div>
+      </el-form-item>
+
+      <el-divider />
+
       <!-- 【【【 新增：缓存开关 】】】 -->
       <el-form-item label="启用内存缓存">
         <el-switch v-model="store.config.enable_cache" />
@@ -71,6 +80,15 @@
         <el-switch v-model="store.config.show_missing_episodes" />
         <div class="form-item-description">
           开启后，进入剧集列表时，会自动从 TMDB 查询并显示本地缺失的剧集。
+        </div>
+      </el-form-item>
+
+      <el-divider />
+
+      <el-form-item label="全局强制按 TMDB ID 合并">
+        <el-switch v-model="store.config.force_merge_by_tmdb_id" />
+        <div class="form-item-description">
+          开启后，将无视虚拟库的独立设置，强制对所有内容进行 TMDB ID 合并。
         </div>
       </el-form-item>
 

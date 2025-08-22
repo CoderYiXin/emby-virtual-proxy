@@ -23,10 +23,12 @@ class AdvancedFilter(BaseModel):
 class VirtualLibrary(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
-    resource_type: Literal["collection", "tag", "genre", "studio", "person", "all"]
+    resource_type: Literal["collection", "tag", "genre", "studio", "person", "all", "rsshub"]
     resource_id: Optional[str] = None
     # image: Optional[str] = None  <-- 我们不再需要这个字段了，可以删除或注释掉
     image_tag: Optional[str] = None # <-- 【新增】用于存储图片的唯一标签
+    rsshub_url: Optional[str] = None # <-- 【新增】RSSHUB链接
+    rss_type: Optional[Literal["douban", "bangumi"]] = None # <-- 【新增】RSS类型
     advanced_filter_id: Optional[str] = None
     merge_by_tmdb_id: bool = Field(default=False)
     order: int = 0
@@ -64,6 +66,12 @@ class AppConfig(BaseModel):
 
     # 新增：TMDB HTTP 代理
     tmdb_proxy: Optional[str] = Field(default="")
+
+    # 新增：RSS 定时刷新间隔（小时），0为禁用
+    rss_refresh_interval: Optional[int] = Field(default=0)
+
+    # 新增：全局强制 TMDB ID 合并
+    force_merge_by_tmdb_id: bool = Field(default=False)
 
     class Config:
         # 允许从别名填充模型

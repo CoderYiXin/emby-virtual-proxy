@@ -16,6 +16,7 @@ export default {
     addLibrary: (library) => apiClient.post('/libraries', library),
     updateLibrary: (id, library) => apiClient.put(`/libraries/${id}`, library),
     deleteLibrary: (id) => apiClient.delete(`/libraries/${id}`),
+    refreshRssLibrary: (id) => apiClient.post(`/libraries/${id}/refresh`),
 
     // Display Management
     getAllLibraries: () => apiClient.get('/all-libraries'),

@@ -10,6 +10,7 @@ from typing import List, Any, Dict
 from . import handler_merger, handler_views
 # 导入我们新的翻译器和旧的后筛选逻辑
 from ._filter_translator import translate_rules
+from .handler_rss import RssHandler
 from proxy_cache import vlib_items_cache
 logger = logging.getLogger(__name__)
 
@@ -133,6 +134,39 @@ async def handle_virtual_library_items(
     resource_map = {"collection": "CollectionIds", "tag": "TagIds", "person": "PersonIds", "genre": "GenreIds", "studio": "StudioIds"}
     if found_vlib.resource_type in resource_map:
         new_params[resource_map[found_vlib.resource_type]] = found_vlib.resource_id
+    # --- 【【【 新增：借鉴“缺失剧集”逻辑，重构 RSS 库的统一处理方案 】】】 ---
+    elif found_vlib.resource_type == "rsshub":
+        # 终极修复：将所有 RSS 逻辑委托给 RssHandler，并传入必要的上下文
+        rss_handler = RssHandler()
+        # 关键：传入 request.query_params 以便 RssHandler 可以继承 Fields 等参数
+        # 关键：传入 user_id 和 session 以便 RssHandler 可以自己发起请求
+        response_data = await rss_handler.handle(
+            request_path=full_path, 
+            vlib_id=found_vlib.id,
+            request_params=request.query_params,
+            user_id=user_id,
+            session=session,
+            real_emby_url=real_emby_url,
+            request_headers=request.headers
+        )
+        
+        # 手动分页
+        start_idx = int(params.get("StartIndex", 0))
+        limit_str = params.get("Limit")
+        final_items = response_data.get("Items", [])
+        
+        if limit_str:
+            try:
+                limit = int(limit_str)
+                paginated_items = final_items[start_idx : start_idx + limit]
+            except (ValueError, TypeError):
+                paginated_items = final_items[start_idx:]
+        else:
+            paginated_items = final_items[start_idx:]
+            
+        final_response = {"Items": paginated_items, "TotalRecordCount": len(final_items)}
+        return Response(content=json.dumps(final_response).encode('utf-8'), media_type="application/json")
+    # --- 【【【 RSS 逻辑结束 】】】 ---
 
     # 【【【核心优化点 2】】】: 应用高级筛选器翻译
     post_filter_rules = []
@@ -149,7 +183,7 @@ async def handle_virtual_library_items(
     # 【【【核心优化点 3】】】: 处理合并的特殊情况
     # 如果启用了TMDB合并，我们需要获取一个更大的数据集来进行有效的合并，然后再在代理端进行分页。
     # 这是一种混合模式，仍然远比获取所有项目要高效。
-    is_tmdb_merge_enabled = found_vlib.merge_by_tmdb_id
+    is_tmdb_merge_enabled = found_vlib.merge_by_tmdb_id or config.force_merge_by_tmdb_id
 
     target_emby_api_path = f"Users/{user_id}/Items"
     search_url = f"{real_emby_url}/emby/{target_emby_api_path}"

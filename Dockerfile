@@ -22,7 +22,8 @@ ENV PYTHONPATH=/app/src
 
 # 将依赖文件复制到工作目录根部并安装
 COPY src/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apt-get update && apt-get install -y supervisor && \
+    pip install --no-cache-dir -r requirements.txt
 
 # 关键改动：将编译好的前端文件复制到 /app/static，与 src 目录同级
 COPY --from=frontend-builder /app/frontend/dist /app/static
@@ -35,4 +36,4 @@ EXPOSE 8999
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # 修改：使用 supervisord 启动服务
-CMD ["/usr/local/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]

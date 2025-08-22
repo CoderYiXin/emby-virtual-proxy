@@ -17,6 +17,12 @@ async def is_item_in_a_merge_enabled_vlib(
     此版本为终极加固版，强制进行字符串比较，以避免任何类型不匹配问题，并依赖DEBUG日志进行诊断。
     """
     config = config_manager.load_config()
+
+    # 检查全局强制合并开关
+    if config.force_merge_by_tmdb_id:
+        logger.info(f"MERGE_CHECK: ✅ 全局开关已启用。允许对项目 {item_id} 进行合并。")
+        return True
+
     merge_vlibs = [vlib for vlib in config.virtual_libraries if vlib.merge_by_tmdb_id]
 
     if not merge_vlibs:

@@ -32,7 +32,7 @@
             </el-table-column>
             <el-table-column label="资源详情">
                 <template #default="scope">
-                    {{ getResourceNameById(scope.row.resource_type, scope.row.resource_id) }}
+                    {{ getResourceNameById(scope.row.resource_type, scope.row.resource_id, scope.row) }}
                 </template>
             </el-table-column>
             <el-table-column label="TMDB合并" width="100" align="center">
@@ -41,25 +41,27 @@
                      <el-tag v-else type="info" size="small">未开启</el-tag>
                 </template>
             </el-table-column>
-            <el-table-column label="操作" width="150" align="center">
+            <el-table-column label="操作" width="220" align="right">
                 <template #default="scope">
-                    <el-button size="small" @click="store.openEditDialog(scope.row)">编辑</el-button>
-                    
-                    <!-- 【【【 这是经过美化的版本 】】】 -->
-                    <el-popconfirm
-                        :title="`确定要删除虚拟库 “${scope.row.name}” 吗？`"
-                        width="250"
-                        confirm-button-text="狠心删除"
-                        cancel-button-text="我再想想"
-                        :icon="WarningFilled"
-                        icon-color="#F56C6C"
-                        @confirm="store.deleteLibrary(scope.row.id)"
-                    >
-                        <template #reference>
-                            <el-button size="small" type="danger">删除</el-button>
-                        </template>
-                    </el-popconfirm>
-
+                    <div class="action-buttons">
+                        <el-button v-if="scope.row.resource_type === 'rsshub'" size="small" type="success" @click="store.refreshRssLibrary(scope.row.id)">刷新</el-button>
+                        <el-button size="small" @click="store.openEditDialog(scope.row)">编辑</el-button>
+                        
+                        <!-- 【【【 这是经过美化的版本 】】】 -->
+                        <el-popconfirm
+                            :title="`确定要删除虚拟库 “${scope.row.name}” 吗？`"
+                            width="250"
+                            confirm-button-text="狠心删除"
+                            cancel-button-text="我再想想"
+                            :icon="WarningFilled"
+                            icon-color="#F56C6C"
+                            @confirm="store.deleteLibrary(scope.row.id)"
+                        >
+                            <template #reference>
+                                <el-button size="small" type="danger">删除</el-button>
+                            </template>
+                        </el-popconfirm>
+                    </div>
                 </template>
             </el-table-column>
         </el-table>
@@ -77,12 +79,16 @@ const resourceTypeMap = {
     tag: '标签',
     genre: '类型',
     studio: '工作室',
-    person: '人员'
+    person: '人员',
+    rsshub: 'RSSHUB'
 };
 
 const getResourceTypeLabel = (type) => resourceTypeMap[type] || '未知';
 
-const getResourceNameById = (type, id) => {
+const getResourceNameById = (type, id, row) => {
+    if (type === 'rsshub') {
+        return row.rsshub_url;
+    }
     if (type === 'person') {
         const name = store.personNameCache[id];
         if (name && name !== '...') return `${name} (${id})`;
@@ -100,5 +106,10 @@ const getResourceNameById = (type, id) => {
     display: flex;
     justify-content: space-between;
     align-items: center;
+}
+.action-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
 }
 </style>

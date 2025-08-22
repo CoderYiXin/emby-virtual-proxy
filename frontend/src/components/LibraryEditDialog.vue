@@ -19,10 +19,22 @@
           <el-option label="类型 (Genre)" value="genre"></el-option>
           <el-option label="工作室 (Studio)" value="studio"></el-option>
           <el-option label="人员 (Person)" value="person"></el-option>
+          <el-option label="RSSHUB" value="rsshub"></el-option>
         </el-select>
       </el-form-item>
       
-      <el-form-item label="选择资源" required v-if="store.currentLibrary.resource_type !== 'all'">
+      <el-form-item label="RSSHUB 链接" required v-if="store.currentLibrary.resource_type === 'rsshub'">
+        <el-input v-model="store.currentLibrary.rsshub_url" placeholder="请输入 RSSHUB 链接"></el-input>
+      </el-form-item>
+
+      <el-form-item label="RSS 类型" required v-if="store.currentLibrary.resource_type === 'rsshub'">
+        <el-select v-model="store.currentLibrary.rss_type" placeholder="请选择 RSS 类型">
+          <el-option label="豆瓣" value="douban"></el-option>
+          <el-option label="Bangumi" value="bangumi"></el-option>
+        </el-select>
+      </el-form-item>
+
+      <el-form-item label="选择资源" required v-if="store.currentLibrary.resource_type !== 'all' && store.currentLibrary.resource_type !== 'rsshub'">
         <el-select 
           v-model="store.currentLibrary.resource_id"
           filterable

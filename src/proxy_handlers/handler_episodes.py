@@ -81,6 +81,9 @@ async def handle_episodes_merge(request: Request, full_path: str, session: Clien
             episodes_url = f"{real_emby_url}/emby/Shows/{series_id}/Episodes"
             episode_params = dict(params)
             episode_params["SeasonId"] = matching_season.get("Id") # 使用正确的季ID
+            # 移除分页参数，以获取所有集
+            episode_params.pop("Limit", None)
+            episode_params.pop("StartIndex", None)
             
             async with session.get(episodes_url, params=episode_params, headers=headers) as resp:
                 return (await resp.json()).get("Items", []) if resp.status == 200 else []

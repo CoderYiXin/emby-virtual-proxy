@@ -16,3 +16,5 @@ logs.txt
 # Python 缓存
 __pycache__/
 *.pyc
+
+AI_DOCUMENTATION.md

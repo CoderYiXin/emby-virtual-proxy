@@ -23,11 +23,13 @@ import base64
 from PIL import Image
 from io import BytesIO
 from fastapi import Request
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 import docker
 from proxy_cache import api_cache
 from models import AppConfig, VirtualLibrary, AdvancedFilter
 import config_manager
+from db_manager import DBManager, RSS_CACHE_DB
 
 # 【【【 在这里添加或者确认你有这几行 】】】
 import logging
@@ -38,9 +40,13 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 # 【【【 添加/确认结束 】】】
 
+scheduler = AsyncIOScheduler()
 
 admin_app = FastAPI(title="Emby Virtual Proxy - Admin API")
 api_router = APIRouter(prefix="/api")
+
+# Define path for the library items DB, as it's not in db_manager
+RSS_LIBRARY_ITEMS_DB = Path("/app/config/rss_library_items.db")
 
 class CoverRequest(BaseModel):
     library_id: str
@@ -214,6 +220,8 @@ async def get_config():
 @api_router.post("/config", response_model=AppConfig, response_model_by_alias=True, tags=["Configuration"])
 async def update_config(config: AppConfig):
     config_manager.save_config(config)
+    # 更新定时任务
+    update_rss_refresh_job(config)
     return config
 
 # 将 /cache/clear 路径改为 /proxy/restart，功能也彻底改变
@@ -262,6 +270,38 @@ async def restart_proxy_container():
             status_code=500,
             detail=f"重启容器时发生未知内部错误: {e}"
         )
+
+async def refresh_rss_library_internal(vlib: VirtualLibrary):
+    """内部刷新逻辑，供手动和定时任务调用"""
+    try:
+        if vlib.rss_type == "douban":
+            from rss_processor.douban import DoubanProcessor
+            processor = DoubanProcessor(vlib.id, vlib.rsshub_url)
+            processor.process()
+        elif vlib.rss_type == "bangumi":
+            from rss_processor.bangumi import BangumiProcessor
+            processor = BangumiProcessor(vlib.id, vlib.rsshub_url)
+            processor.process()
+        else:
+            logger.warning(f"Unknown RSS type: {vlib.rss_type} for library {vlib.id}")
+    except Exception as e:
+        logger.error(f"Error refreshing RSS library {vlib.id}: {e}", exc_info=True)
+
+@api_router.post("/libraries/{library_id}/refresh", status_code=202, tags=["Libraries"])
+async def refresh_rss_library(library_id: str, request: Request):
+    """手动触发 RSS 虚拟库的刷新"""
+    config = config_manager.load_config()
+    vlib = next((lib for lib in config.virtual_libraries if lib.id == library_id), None)
+
+    if not vlib:
+        raise HTTPException(status_code=404, detail="Virtual library not found")
+    if vlib.resource_type != "rsshub":
+        raise HTTPException(status_code=400, detail="This library is not an RSSHUB library")
+
+    # 在后台任务中运行刷新，避免阻塞 API
+    asyncio.create_task(refresh_rss_library_internal(vlib))
+    
+    return {"message": "RSS library refresh process has been started."}
 
 @api_router.post("/generate-cover", tags=["Cover Generator"])
 async def generate_cover(body: CoverRequest):
@@ -479,15 +519,42 @@ async def update_library(library_id: str, updated_library_data: VirtualLibrary):
 @api_router.delete("/libraries/{library_id}", status_code=204, tags=["Libraries"])
 async def delete_library(library_id: str):
     config = config_manager.load_config()
-    original_length = len(config.virtual_libraries)
     
+    lib_to_delete = next((lib for lib in config.virtual_libraries if lib.id == library_id), None)
+
+    if not lib_to_delete:
+        raise HTTPException(status_code=404, detail="Virtual library not found")
+
+    # If it's an RSS library, perform cleanup before deleting
+    if lib_to_delete.resource_type == "rsshub":
+        logger.info(f"Deleting RSS library '{lib_to_delete.name}'. Performing cleanup...")
+        
+        # 1. Clean RSS feed cache if URL exists
+        if lib_to_delete.rsshub_url:
+            try:
+                rss_db = DBManager(RSS_CACHE_DB)
+                rss_db.execute("DELETE FROM rss_cache WHERE url = ?", (lib_to_delete.rsshub_url,), commit=True)
+                logger.info(f"Removed RSS cache for URL: {lib_to_delete.rsshub_url}")
+            except Exception as e:
+                logger.error(f"Failed to clean RSS cache for {lib_to_delete.rsshub_url}: {e}")
+
+        # 2. Clean associated items from rss_library_items.db
+        try:
+            # Check if the DB file exists before trying to connect
+            if RSS_LIBRARY_ITEMS_DB.is_file():
+                rss_items_db = DBManager(RSS_LIBRARY_ITEMS_DB)
+                rss_items_db.execute("DELETE FROM rss_library_items WHERE library_id = ?", (library_id,), commit=True)
+                logger.info(f"Removed all items for library ID {library_id} from rss_library_items.db")
+            else:
+                logger.info(f"rss_library_items.db not found, skipping item cleanup for library ID {library_id}.")
+        except Exception as e:
+            logger.warning(f"Could not clean items for library ID {library_id} from rss_library_items.db: {e}")
+
+    # Proceed with deleting from config
     config.virtual_libraries = [lib for lib in config.virtual_libraries if lib.id != library_id]
     
     if library_id in config.display_order:
         config.display_order.remove(library_id)
-        
-    if len(config.virtual_libraries) == original_length:
-        raise HTTPException(status_code=404, detail="Virtual library not found")
         
     config_manager.save_config(config)
     return Response(status_code=204)
@@ -560,5 +627,45 @@ covers_dir = Path("/app/config/images")
 covers_dir.mkdir(exist_ok=True) # 确保目录存在
 admin_app.mount("/covers", StaticFiles(directory=str(covers_dir)), name="covers")
 
+
+def update_rss_refresh_job(config: AppConfig):
+    job_id = 'rss_refresh_job'
+    if scheduler.get_job(job_id):
+        scheduler.remove_job(job_id)
+    
+    if config.rss_refresh_interval and config.rss_refresh_interval > 0:
+        scheduler.add_job(
+            refresh_all_rss_libraries,
+            'interval',
+            hours=config.rss_refresh_interval,
+            id=job_id,
+            replace_existing=True
+        )
+        logger.info(f"RSS refresh job scheduled to run every {config.rss_refresh_interval} hours.")
+
+async def refresh_all_rss_libraries():
+    """定时刷新所有 RSS 虚拟库"""
+    logger.info("Starting scheduled RSS library refresh...")
+    config = config_manager.load_config()
+    rss_libraries = [lib for lib in config.virtual_libraries if lib.resource_type == "rsshub"]
+    
+    for vlib in rss_libraries:
+        logger.info(f"Refreshing RSS library: {vlib.name} ({vlib.id})")
+        await refresh_rss_library_internal(vlib)
+    
+    logger.info("Scheduled RSS library refresh finished.")
+
+@admin_app.on_event("startup")
+async def startup_event():
+    # 启动调度器
+    scheduler.start()
+    # 初始化定时任务
+    config = config_manager.load_config()
+    update_rss_refresh_job(config)
+
+@admin_app.on_event("shutdown")
+async def shutdown_event():
+    # 关闭调度器
+    scheduler.shutdown()
 
 admin_app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")

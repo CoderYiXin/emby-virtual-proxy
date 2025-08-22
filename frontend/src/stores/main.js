@@ -154,10 +154,25 @@ export const useMainStore = defineStore('main', {
 
     async saveLibrary() {
       const libraryToSave = this.currentLibrary;
-      if (!libraryToSave.name || (libraryToSave.resource_type !== 'all' && !libraryToSave.resource_id)) {
+
+      // 采用更清晰的分步验证逻辑来彻底修复问题
+      if (!libraryToSave.name) {
         ElMessage.warning('请填写所有必填字段');
         return;
       }
+
+      if (libraryToSave.resource_type === 'rsshub') {
+        if (!libraryToSave.rsshub_url || !libraryToSave.rss_type) {
+          ElMessage.warning('请填写所有必填字段');
+          return;
+        }
+      } else if (libraryToSave.resource_type !== 'all') {
+        if (!libraryToSave.resource_id) {
+          ElMessage.warning('请填写所有必填字段');
+          return;
+        }
+      }
+
       this.saving = true;
       const action = this.isEditing ? api.updateLibrary(libraryToSave.id, libraryToSave) : api.addLibrary(libraryToSave);
       const successMsg = this.isEditing ? '虚拟库已更新' : '虚拟库已添加';
@@ -226,6 +241,15 @@ export const useMainStore = defineStore('main', {
             await this._reloadConfigAndAllLibs();
         } catch (error) {
             this._handleApiError(error, '删除虚拟库失败');
+        }
+    },
+
+    async refreshRssLibrary(id) {
+        try {
+            await api.refreshRssLibrary(id);
+            ElMessage.success('RSS 库刷新请求已发送，将在后台处理。');
+        } catch (error) {
+            this._handleApiError(error, '刷新 RSS 库失败');
         }
     },
     async restartProxyServer() {
