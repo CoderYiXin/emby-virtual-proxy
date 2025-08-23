@@ -38,6 +38,7 @@ class VirtualLibrary(BaseModel):
 class AppConfig(BaseModel):
     emby_url: str = Field(default="http://127.0.0.1:8096")
     emby_api_key: Optional[str] = Field(default="")
+    emby_server_id: Optional[str] = Field(default=None) # 新增：用于TMDB缓存占位符的备用服务器ID
     log_level: Literal["debug", "info", "warn", "error"] = Field(default="info")
     display_order: List[str] = Field(default_factory=list)
     hide: List[str] = Field(default_factory=list)

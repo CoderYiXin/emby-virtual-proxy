@@ -96,7 +96,7 @@ class RssHandler:
             
             self.tmdb_cache_db.execute(
                 "INSERT OR REPLACE INTO tmdb_cache (tmdb_id, media_type, data) VALUES (?, ?, ?)",
-                (tmdb_id, media_type, json.dumps(emby_item)),
+                (tmdb_id, media_type, json.dumps(emby_item, ensure_ascii=False)),
                 commit=True
             )
             return emby_item
