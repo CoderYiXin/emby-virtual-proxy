@@ -61,40 +61,54 @@ class BaseRssProcessor:
         raise NotImplementedError
 
     def _search_tmdb_by_name(self, title, year=None):
-        """通用的 TMDB 搜索方法，作为兜底方案"""
+        """通用的 TMDB 搜索方法，作为兜底方案。支持处理'|'分隔的多个标题。"""
         logger.info(f"正在使用通用搜索为 '{title}' (年份: {year or 'N/A'}) 查找 TMDB ID...")
         if not self.config.tmdb_api_key:
             logger.error("TMDB API Key 未配置，无法执行通用搜索。")
             return []
 
-        url = f"https://api.themoviedb.org/3/search/multi?api_key={self.config.tmdb_api_key}&query={requests.utils.quote(title)}&language=zh-CN"
-        if year:
-            url += f"&year={year}"
+        # 替换全角'｜'为半角'|'，然后拆分为多个标题进行尝试
+        normalized_title = title.replace('｜', '|')
+        titles_to_try = [t.strip() for t in normalized_title.split('|')]
         
         proxies = {"http": self.config.tmdb_proxy, "https": self.config.tmdb_proxy} if self.config.tmdb_proxy else None
-        
-        try:
-            response = requests.get(url, proxies=proxies, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            results = data.get("results", [])
 
-            if not results:
-                logger.warning(f"通用搜索未能为 '{title}' 找到任何 TMDB 结果。")
-                return []
-
-            # 简单的匹配逻辑：选择第一个电影或电视剧结果
-            for result in results:
-                media_type = result.get("media_type")
-                if media_type in ["movie", "tv"]:
-                    tmdb_id = result.get("id")
-                    logger.info(f"通用搜索成功: '{title}' -> TMDB ID {tmdb_id} ({media_type})")
-                    return [(str(tmdb_id), media_type)]
+        for current_title in titles_to_try:
+            if not current_title: # 跳过空的标题
+                continue
             
-            return []
-        except requests.RequestException as e:
-            logger.error(f"通用 TMDB 搜索 API 请求失败: {e}")
-            return []
+            logger.info(f"正在尝试搜索标题: '{current_title}'...")
+            url = f"https://api.themoviedb.org/3/search/multi?api_key={self.config.tmdb_api_key}&query={requests.utils.quote(current_title)}&language=zh-CN"
+            if year:
+                url += f"&year={year}"
+            
+            try:
+                response = requests.get(url, proxies=proxies, timeout=10)
+                response.raise_for_status()
+                data = response.json()
+                results = data.get("results", [])
+
+                if not results:
+                    # 这个标题没找到，继续尝试下一个
+                    continue
+
+                # 简单的匹配逻辑：选择第一个电影或电视剧结果
+                for result in results:
+                    media_type = result.get("media_type")
+                    if media_type in ["movie", "tv"]:
+                        tmdb_id = result.get("id")
+                        logger.info(f"通用搜索成功: '{current_title}' -> TMDB ID {tmdb_id} ({media_type})")
+                        # 找到一个就立刻返回
+                        return [(str(tmdb_id), media_type)]
+                
+            except requests.RequestException as e:
+                logger.error(f"通用 TMDB 搜索 API 请求失败 (标题: '{current_title}'): {e}")
+                # 如果一个标题请求失败，继续尝试下一个
+                continue
+        
+        # 所有标题都尝试过后，仍然没有找到结果
+        logger.warning(f"通用搜索未能为任何备选标题 '{title}' 找到任何 TMDB 结果。")
+        return []
 
     def process(self):
         """处理整个流程，包含专用匹配和通用兜底匹配"""
