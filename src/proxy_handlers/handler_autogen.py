@@ -126,8 +126,9 @@ async def generate_poster_in_background(library_id: str, user_id: str, api_key: 
             logger.error(f"后台任务：无法加载样式 '{style_name}': {e}")
             return
 
-        zh_font_path = "/app/src/assets/fonts/multi_1_zh.ttf"
-        en_font_path = "/app/src/assets/fonts/multi_1_en.otf"
+        # 检查自定义字体路径，如果未设置则使用默认值
+        zh_font_path = config.custom_zh_font_path or "/app/src/assets/fonts/multi_1_zh.ttf"
+        en_font_path = config.custom_en_font_path or "/app/src/assets/fonts/multi_1_en.otf"
         
         kwargs = {
             "title": (vlib.name, ""),

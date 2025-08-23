@@ -74,6 +74,10 @@ class AppConfig(BaseModel):
     # 新增：全局强制 TMDB ID 合并
     force_merge_by_tmdb_id: bool = Field(default=False)
 
+    # 新增：自定义字体路径
+    custom_zh_font_path: Optional[str] = Field(default="")
+    custom_en_font_path: Optional[str] = Field(default="")
+
     class Config:
         # 允许从别名填充模型
         populate_by_name = True

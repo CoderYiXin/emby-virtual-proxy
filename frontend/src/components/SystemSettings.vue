@@ -105,6 +105,26 @@
         </div>
       </el-form-item>
 
+      <el-form-item label="自定义中文字体路径 (可选)">
+        <el-input 
+          v-model="store.config.custom_zh_font_path"
+          placeholder="请输入容器内的绝对路径, e.g., /config/fonts/myfont.ttf"
+        />
+        <div class="form-item-description">
+          留空则使用默认字体。请确保您提供的路径在 Docker 容器中是可访问的。
+        </div>
+      </el-form-item>
+
+      <el-form-item label="自定义英文字体路径 (可选)">
+        <el-input 
+          v-model="store.config.custom_en_font_path"
+          placeholder="请输入容器内的绝对路径, e.g., /config/fonts/myfont.otf"
+        />
+        <div class="form-item-description">
+          留空则使用默认字体。请确保您提供的路径在 Docker 容器中是可访问的。
+        </div>
+      </el-form-item>
+
       <el-divider />
 
       <el-form-item label="危险区域">
