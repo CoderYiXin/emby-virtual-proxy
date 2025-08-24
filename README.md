@@ -275,7 +275,8 @@
 本项目的设计和功能受到了以下优秀项目的启发，特此感谢：
 
 - **[EkkoG/emby-virtual-lib](https://github.com/EkkoG/emby-virtual-lib)**
-
+- **[justzerock/MoviePilot-Plugins](https://github.com/justzerock/MoviePilot-Plugins/tree/8ef476f9e5ae4d3d549300bad74083c084a46f1d)**
+- **[HappyQuQu/jellyfin-library-poster](https://github.com/HappyQuQu/jellyfin-library-poster)**
 ---
 
 总而言之，**Emby Virtual Proxy** 是一个为 Emby 高级玩家和收藏家设计的强大工具，它通过“代理”这一巧妙的方式，无侵入性地为您的 Emby 带来了前所未有的灵活性和可定制性。
