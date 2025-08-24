@@ -1,7 +1,7 @@
 # src/admin_server.py
 
 import uvicorn
-from fastapi import FastAPI, APIRouter, HTTPException, Response, Query
+from fastapi import FastAPI, APIRouter, HTTPException, Response, Query, File, UploadFile
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import uuid
@@ -50,9 +50,10 @@ RSS_LIBRARY_ITEMS_DB = Path("/app/config/rss_library_items.db")
 
 class CoverRequest(BaseModel):
     library_id: str
-    library_name: str
+    title_zh: str # 之前是 library_name，现在改为 title_zh
     title_en: Optional[str] = None
     style_name: str # 新增：用于指定封面样式
+    temp_image_paths: Optional[List[str]] = None
 
 # --- 高级筛选器 API ---
 @api_router.get("/advanced-filters", response_model=List[AdvancedFilter], tags=["Advanced Filters"])
@@ -146,6 +147,55 @@ async def _fetch_images_from_vlib(library_id: str, temp_dir: Path, config: AppCo
 
     if not any(results):
         raise HTTPException(status_code=500, detail="所有封面素材下载失败，无法生成海报。")
+
+@api_router.post("/upload_temp_image", tags=["Cover Generator"])
+async def upload_temp_image(file: UploadFile = File(...)):
+    TEMP_IMAGE_DIR = Path("/app/config/temp_images")
+    TEMP_IMAGE_DIR.mkdir(exist_ok=True)
+    
+    # Sanitize filename
+    filename = re.sub(r'[^a-zA-Z0-9._-]', '', file.filename)
+    unique_filename = f"{uuid.uuid4()}_{filename}"
+    file_path = TEMP_IMAGE_DIR / unique_filename
+    
+    try:
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Return the path that the frontend can use
+        return {"path": str(file_path)}
+    except Exception as e:
+        logger.error(f"上传临时图片失败: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="文件上传处理失败。")
+
+async def _fetch_images_from_custom_path(custom_path: str, temp_dir: Path):
+    """从自定义目录随机复制图片到临时目录"""
+    logger.info(f"开始从自定义目录 {custom_path} 获取封面素材...")
+    
+    source_dir = Path(custom_path)
+    if not source_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"自定义图片目录不存在: {custom_path}")
+
+    supported_formats = (".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp")
+    image_files = [f for f in source_dir.iterdir() if f.is_file() and f.suffix.lower() in supported_formats]
+
+    if not image_files:
+        raise HTTPException(status_code=404, detail=f"自定义图片目录中未找到支持的图片文件: {custom_path}")
+
+    selected_files = random.sample(image_files, min(9, len(image_files)))
+
+    for i, file_path in enumerate(selected_files):
+        try:
+            dest_path = temp_dir / f"{i + 1}{file_path.suffix}"
+            shutil.copy(file_path, dest_path)
+        except Exception as e:
+            logger.error(f"复制文件 {file_path} 时出错: {e}")
+            continue
+    
+    # 检查是否至少成功复制了一张图片
+    if not any(temp_dir.iterdir()):
+        raise HTTPException(status_code=500, detail="从自定义目录复制图片素材失败。")
+
 # --- 辅助函数：健壮地获取 Emby 数据 ---
 async def _fetch_from_emby(endpoint: str, params: Dict = None) -> List:
     config = config_manager.load_config()
@@ -307,7 +357,7 @@ async def refresh_rss_library(library_id: str, request: Request):
 async def generate_cover(body: CoverRequest):
     try:
         # 调用核心生成逻辑，并传递样式名称
-        image_tag = await _generate_library_cover(body.library_id, body.library_name, body.title_en, body.style_name)
+        image_tag = await _generate_library_cover(body.library_id, body.title_zh, body.title_en, body.style_name, body.temp_image_paths)
         if image_tag:
             # 成功后，需要找到对应的虚拟库并更新其 image_tag
             config = config_manager.load_config()
@@ -354,7 +404,7 @@ async def clear_all_covers():
         raise HTTPException(status_code=500, detail=f"清空封面时发生内部错误: {e}")
 
 # 封面生成的核心逻辑
-async def _generate_library_cover(library_id: str, library_name: str, title_en: Optional[str], style_name: str) -> Optional[str]:
+async def _generate_library_cover(library_id: str, title_zh: str, title_en: Optional[str], style_name: str, temp_image_paths: Optional[List[str]] = None) -> Optional[str]:
     config = config_manager.load_config()
     # --- 1. 定义路径 ---
     FONT_DIR = "/app/src/assets/fonts/"
@@ -367,11 +417,26 @@ async def _generate_library_cover(library_id: str, library_name: str, title_en: 
     image_gen_dir.mkdir()
 
     try:
-        # --- 2. 【核心改动】: 从虚拟库下载图片素材 ---
-        await _fetch_images_from_vlib(library_id, image_gen_dir, config)
+        # --- 2. 【核心改动】: 根据配置选择图片来源 (四级回退) ---
+        if temp_image_paths:
+            logger.info(f"从 {len(temp_image_paths)} 张上传的临时图片中随机选择素材...")
+            selected_paths = random.sample(temp_image_paths, min(9, len(temp_image_paths)))
+            for i, src_path_str in enumerate(selected_paths):
+                src_path = Path(src_path_str)
+                if src_path.is_file():
+                    dest_path = image_gen_dir / f"{i + 1}{src_path.suffix}"
+                    shutil.copy(src_path, dest_path)
+        else:
+            vlib = next((lib for lib in config.virtual_libraries if lib.id == library_id), None)
+            if vlib and vlib.cover_custom_image_path:
+                await _fetch_images_from_custom_path(vlib.cover_custom_image_path, image_gen_dir)
+            elif config.custom_image_path:
+                await _fetch_images_from_custom_path(config.custom_image_path, image_gen_dir)
+            else:
+                await _fetch_images_from_vlib(library_id, image_gen_dir, config)
 
         # --- 3. 【核心改动】: 动态调用所选的样式生成函数 ---
-        logger.info(f"素材准备完毕，开始使用样式 '{style_name}' 为 '{library_name}' ({library_id}) 生成封面...")
+        logger.info(f"素材准备完毕，开始使用样式 '{style_name}' 为 '{title_zh}' ({library_id}) 生成封面...")
         
         try:
             # 动态导入选择的样式模块
@@ -383,12 +448,27 @@ async def _generate_library_cover(library_id: str, library_name: str, title_en: 
             logger.error(f"无法加载或找到样式生成函数: {style_name} -> {e}")
             raise HTTPException(status_code=400, detail=f"无效的样式名称: {style_name}")
 
-        # 【核心修复】: 根据不同的样式，准备不同的参数
-        zh_font_path = os.path.join(FONT_DIR, "multi_1_zh.ttf")
-        en_font_path = os.path.join(FONT_DIR, "multi_1_en.otf")
+        # --- 字体选择逻辑 ---
+        vlib = next((lib for lib in config.virtual_libraries if lib.id == library_id), None)
         
+        # 确定中文字体
+        if vlib and vlib.cover_custom_zh_font_path:
+            zh_font_path = vlib.cover_custom_zh_font_path
+        elif config.custom_zh_font_path:
+            zh_font_path = config.custom_zh_font_path
+        else:
+            zh_font_path = os.path.join(FONT_DIR, "multi_1_zh.ttf")
+
+        # 确定英文字体
+        if vlib and vlib.cover_custom_en_font_path:
+            en_font_path = vlib.cover_custom_en_font_path
+        elif config.custom_en_font_path:
+            en_font_path = config.custom_en_font_path
+        else:
+            en_font_path = os.path.join(FONT_DIR, "multi_1_en.otf")
+
         kwargs = {
-            "title": (library_name, title_en),
+            "title": (title_zh, title_en),
             "font_path": (zh_font_path, en_font_path)
         }
 

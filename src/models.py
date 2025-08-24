@@ -34,6 +34,9 @@ class VirtualLibrary(BaseModel):
     order: int = 0
     source_library: Optional[str] = None
     conditions: Optional[list] = None
+    cover_custom_zh_font_path: Optional[str] = Field(default=None) # <-- 【新增】海报自定义中文字体
+    cover_custom_en_font_path: Optional[str] = Field(default=None) # <-- 【新增】海报自定义英文字体
+    cover_custom_image_path: Optional[str] = Field(default=None) # <-- 【新增】海报自定义图片目录
 
 class AppConfig(BaseModel):
     emby_url: str = Field(default="http://127.0.0.1:8096")
@@ -77,6 +80,7 @@ class AppConfig(BaseModel):
     # 新增：自定义字体路径
     custom_zh_font_path: Optional[str] = Field(default="")
     custom_en_font_path: Optional[str] = Field(default="")
+    custom_image_path: Optional[str] = Field(default="") # <-- 【新增】全局自定义图片目录
 
     class Config:
         # 允许从别名填充模型

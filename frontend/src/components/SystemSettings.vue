@@ -115,6 +115,16 @@
         </div>
       </el-form-item>
 
+      <el-form-item label="全局自定义图片目录 (可选)">
+        <el-input 
+          v-model="store.config.custom_image_path"
+          placeholder="请输入容器内的绝对路径, e.g., /config/images/custom"
+        />
+        <div class="form-item-description">
+          留空则默认从虚拟库内容中下载封面。如果设置，将作为虚拟库未指定自定义图片目录时的回退选项。
+        </div>
+      </el-form-item>
+
       <el-form-item label="自定义英文字体路径 (可选)">
         <el-input 
           v-model="store.config.custom_en_font_path"

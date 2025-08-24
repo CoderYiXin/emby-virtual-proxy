@@ -92,6 +92,10 @@
         </div>
       </el-form-item>
       
+      <el-form-item label="封面中文标题">
+         <el-input v-model="coverTitleZh" placeholder="可选，留空则使用虚拟库名称"></el-input>
+      </el-form-item>
+
       <el-form-item label="封面英文标题">
          <el-input v-model="coverTitleEn" placeholder="可选，用于封面上的英文装饰文字"></el-input>
       </el-form-item>
@@ -104,9 +108,35 @@
         </el-select>
       </el-form-item>
 
+      <el-form-item label="自定义中文字体">
+        <el-input v-model="store.currentLibrary.cover_custom_zh_font_path" placeholder="可选，留空则使用全局字体"></el-input>
+      </el-form-item>
+
+      <el-form-item label="自定义英文字体">
+        <el-input v-model="store.currentLibrary.cover_custom_en_font_path" placeholder="可选，留空则使用全局字体"></el-input>
+      </el-form-item>
+
+      <el-form-item label="自定义图片目录">
+        <el-input v-model="store.currentLibrary.cover_custom_image_path" placeholder="可选，留空则从虚拟库下载封面"></el-input>
+      </el-form-item>
+
+      <el-form-item label="上传素材图片">
+        <el-upload
+          action="/api/upload_temp_image"
+          list-type="picture-card"
+          :on-success="handleUploadSuccess"
+          :on-remove="handleRemove"
+          :file-list="uploadedFiles"
+          :limit="9"
+          multiple
+        >
+          <el-icon><Plus /></el-icon>
+        </el-upload>
+      </el-form-item>
+
       <el-form-item>
-         <el-button 
-            type="primary" 
+         <el-button
+            type="primary"
             @click="handleGenerateCover" 
             :loading="store.coverGenerating"
           >
@@ -133,14 +163,16 @@
 <script setup>
 import { ref, computed, watch } from 'vue';
 import { useMainStore } from '@/stores/main';
-import { InfoFilled } from '@element-plus/icons-vue';
+import { InfoFilled, Plus } from '@element-plus/icons-vue';
 import api from '@/api';
 
 const store = useMainStore();
 const resourceLoading = ref(false);
 const availableResources = ref([]);
+const coverTitleZh = ref('');
 const coverTitleEn = ref('');
 const selectedStyle = ref('style_multi_1'); // 新增：用于存储所选样式
+const uploadedFiles = ref([]);
 
 const coverImageUrl = computed(() => {
   if (store.currentLibrary?.image_tag) {
@@ -195,16 +227,29 @@ const searchResource = async (query) => {
 };
 
 const handleGenerateCover = async () => {
-    // 将所选样式传递给 store action
-    const success = await store.generateLibraryCover(store.currentLibrary.id, store.currentLibrary.name, coverTitleEn.value, selectedStyle.value);
+    // 如果中文标题为空，则使用虚拟库名称
+    const titleZh = coverTitleZh.value || store.currentLibrary.name;
+    const tempImagePaths = uploadedFiles.value.map(file => file.response.path);
+    // 将所选样式和标题传递给 store action
+    const success = await store.generateLibraryCover(store.currentLibrary.id, titleZh, coverTitleEn.value, selectedStyle.value, tempImagePaths);
     // 成功后，store.currentLibrary.image_tag 会被更新，computed 属性 coverImageUrl 会自动重新计算
 }
+
+const handleUploadSuccess = (response, file, fileList) => {
+  uploadedFiles.value = fileList;
+};
+
+const handleRemove = (file, fileList) => {
+  uploadedFiles.value = fileList;
+};
 
 // 监听对话框打开，并预加载资源
 watch(() => store.dialogVisible, (newVal) => {
   if (newVal) {
+    coverTitleZh.value = ''; // 重置中文标题输入
     coverTitleEn.value = ''; // 重置英文标题输入
     selectedStyle.value = 'style_multi_1'; // 重置样式选择
+    uploadedFiles.value = []; // 清空已上传文件列表
     const resourceType = store.currentLibrary.resource_type;
     const resourceId = store.currentLibrary.resource_id;
 
