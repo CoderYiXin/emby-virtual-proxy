@@ -180,6 +180,14 @@ async def handle_virtual_library_items(
         else:
             logger.warning(f"虚拟库配置了高级筛选器ID '{found_vlib.advanced_filter_id}'，但未找到。")
 
+    # 修复：如果 IsMovie 为 true，则强制 IncludeItemTypes 为 Movie
+    if new_params.get("IsMovie") == "true":
+        new_params["IncludeItemTypes"] = "Movie"
+        logger.info("检测到 IsMovie: 'true'，强制设置 IncludeItemTypes 为 'Movie'。")
+    elif new_params.get("IsSeries") == "true":
+        new_params["IncludeItemTypes"] = "Series"
+        logger.info("检测到 IsSeries: 'true'，强制设置 IncludeItemTypes 为 'Series'。")
+
     # 【【【核心优化点 3】】】: 处理合并的特殊情况
     # 如果启用了TMDB合并，我们需要获取一个更大的数据集来进行有效的合并，然后再在代理端进行分页。
     # 这是一种混合模式，仍然远比获取所有项目要高效。
