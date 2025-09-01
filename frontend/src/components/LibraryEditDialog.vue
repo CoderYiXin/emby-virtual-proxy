@@ -40,9 +40,10 @@
           filterable
           remote
           :remote-method="searchResource"
-          :loading="resourceLoading"
+          :loading="false" 
           placeholder="请输入关键词搜索"
           style="width: 100%;"
+          popper-class="resource-select-popper"
         >
           <el-option
             v-for="item in availableResources"
@@ -53,6 +54,8 @@
             <span v-if="store.currentLibrary.resource_type === 'person'">{{ store.personNameCache[item.id] || item.name }}</span>
             <span v-else>{{ item.name }}</span>
           </el-option>
+          <!-- 手动添加加载状态提示 -->
+          <div v-if="resourceLoading" class="loading-indicator">加载中...</div>
         </el-select>
       </el-form-item>
 
@@ -169,6 +172,9 @@ import api from '@/api';
 const store = useMainStore();
 const resourceLoading = ref(false);
 const availableResources = ref([]);
+const currentQuery = ref('');
+const page = ref(1);
+const hasMore = ref(true);
 const coverTitleZh = ref('');
 const coverTitleEn = ref('');
 const selectedStyle = ref('style_multi_1'); // 新增：用于存储所选样式
@@ -184,14 +190,34 @@ const coverImageUrl = computed(() => {
 
 // 远程搜索资源的逻辑
 const searchResource = async (query) => {
-  if (!store.currentLibrary.resource_type) return;
+  currentQuery.value = query;
+  page.value = 1; // 新的搜索总是从第一页开始
+  availableResources.value = [];
+  hasMore.value = true;
+  await loadMore();
+};
+
+const loadMore = async () => {
+  if (!store.currentLibrary.resource_type || !hasMore.value) return;
+  
   resourceLoading.value = true;
   try {
-    let response;
     if (store.currentLibrary.resource_type === 'person') {
-      response = await api.searchPersons(query);
+      const response = await api.searchPersons(currentQuery.value, page.value);
+      if (response.data && response.data.length > 0) {
+        availableResources.value.push(...response.data);
+        response.data.forEach(person => {
+            if (person.id && !store.personNameCache[person.id]) {
+                store.personNameCache[person.id] = person.name;
+            }
+        });
+        page.value++;
+        hasMore.value = response.data.length === 100; // 如果返回的少于100，说明没有更多了
+      } else {
+        hasMore.value = false;
+      }
     } else {
-      // 对于其他类型，我们从已加载的分类数据中筛选
+      // 对于其他类型，我们从已加载的分类数据中进行前端分页
       const resourceKeyMap = {
         collection: 'collections',
         tag: 'tags',
@@ -199,28 +225,29 @@ const searchResource = async (query) => {
         studio: 'studios',
       };
       const key = resourceKeyMap[store.currentLibrary.resource_type];
-      if (store.classifications[key]) {
-        if (query) {
-          availableResources.value = store.classifications[key].filter(item =>
-            item.name.toLowerCase().includes(query.toLowerCase())
-          );
-        } else {
-          availableResources.value = store.classifications[key].slice(0, 100); // 默认显示前100个
-        }
-        return; // 从本地筛选后直接返回
+      const allItems = store.classifications[key] || [];
+      
+      let filteredItems = allItems;
+      if (currentQuery.value) {
+        filteredItems = allItems.filter(item =>
+          item.name.toLowerCase().includes(currentQuery.value.toLowerCase())
+        );
+      }
+      
+      const currentLength = availableResources.value.length;
+      const nextItems = filteredItems.slice(currentLength, currentLength + 100);
+      
+      if (nextItems.length > 0) {
+        availableResources.value.push(...nextItems);
+      }
+      
+      if (availableResources.value.length >= filteredItems.length) {
+        hasMore.value = false;
       }
     }
-    // 处理人员搜索的API返回
-    if (response && response.data) {
-        availableResources.value = response.data;
-        response.data.forEach(person => {
-            if (person.id && !store.personNameCache[person.id]) {
-                store.personNameCache[person.id] = person.name;
-            }
-        });
-    }
   } catch (error) {
-    console.error("搜索资源失败:", error);
+    console.error("加载资源失败:", error);
+    hasMore.value = false;
   } finally {
     resourceLoading.value = false;
   }
@@ -243,19 +270,46 @@ const handleRemove = (file, fileList) => {
   uploadedFiles.value = fileList;
 };
 
+let scrollWrapper = null;
+
+const handleScroll = (event) => {
+  const { scrollTop, clientHeight, scrollHeight } = event.target;
+  // 增加一个小的缓冲值（例如 10px），以确保在接近底部时就能触发
+  if (scrollHeight - scrollTop <= clientHeight + 10) {
+    if (!resourceLoading.value && hasMore.value) {
+      loadMore();
+    }
+  }
+};
+
 // 监听对话框打开，并预加载资源
 watch(() => store.dialogVisible, (newVal) => {
   if (newVal) {
-    coverTitleZh.value = ''; // 重置中文标题输入
-    coverTitleEn.value = ''; // 重置英文标题输入
-    selectedStyle.value = 'style_multi_1'; // 重置样式选择
-    uploadedFiles.value = []; // 清空已上传文件列表
+    // 重置所有状态
+    coverTitleZh.value = '';
+    coverTitleEn.value = '';
+    selectedStyle.value = 'style_multi_1';
+    uploadedFiles.value = [];
+    availableResources.value = [];
+    currentQuery.value = '';
+    page.value = 1;
+    hasMore.value = true;
+
     const resourceType = store.currentLibrary.resource_type;
     const resourceId = store.currentLibrary.resource_id;
 
-    if (resourceType && resourceType !== 'person') {
-      searchResource(''); // 为非人员类型预加载数据
+    // 预加载第一页数据
+    if (resourceType && resourceType !== 'all' && resourceType !== 'rsshub') {
+      loadMore();
     }
+
+    // 【核心修复】: 使用唯一的 popper-class 来精确查找 DOM 元素并附加事件监听器
+    setTimeout(() => {
+      scrollWrapper = document.querySelector('.resource-select-popper .el-scrollbar__wrap');
+      if (scrollWrapper) {
+        scrollWrapper.addEventListener('scroll', handleScroll);
+      }
+    }, 300); // 延迟以确保 popper 渲染完成
     
     // 如果是编辑模式且有资源ID，尝试解析并显示它
     if (store.isEditing && resourceId) {
@@ -277,11 +331,27 @@ watch(() => store.dialogVisible, (newVal) => {
              if(found) availableResources.value = [found];
         }
     } else {
+        // 在添加模式下，确保列表为空
         availableResources.value = [];
+    }
+  } else {
+    // 【核心修复】: 对话框关闭时，移除事件监听器以防止内存泄漏
+    if (scrollWrapper) {
+      scrollWrapper.removeEventListener('scroll', handleScroll);
+      scrollWrapper = null;
     }
   }
 });
 
+// 【核心修复】: 监听资源类型变化，以便在对话框内切换时能刷新列表
+watch(() => store.currentLibrary.resource_type, (newVal, oldVal) => {
+  // 确保仅在对话框可见且类型确实发生变化时执行
+  if (store.dialogVisible && newVal !== oldVal) {
+    // 重置资源ID和列表
+    store.currentLibrary.resource_id = '';
+    searchResource(''); // 使用空查询重新开始搜索
+  }
+});
 </script>
 
 <style scoped>
@@ -316,6 +386,12 @@ watch(() => store.dialogVisible, (newVal) => {
 }
 .cover-preview-placeholder {
   color: #666;
+  font-size: 14px;
+}
+.loading-indicator {
+  padding: 10px 0;
+  text-align: center;
+  color: #999;
   font-size: 14px;
 }
 </style>
