@@ -49,6 +49,7 @@
         <div v-for="(rule, index) in currentFilter.rules" :key="index" class="rule-row">
             <el-select v-model="rule.field" placeholder="选择字段" style="width: 280px; margin-right: 10px; flex-shrink: 0;">
                 <el-option label="社区评分 (CommunityRating)" value="CommunityRating"></el-option>
+                <el-option label="影评人评分 (CriticRating)" value="CriticRating"></el-option>
                 <el-option label="官方分级 (OfficialRating)" value="OfficialRating"></el-option>
                 <el-option label="发行年份 (ProductionYear)" value="ProductionYear"></el-option>
                 <el-option label="类型 (Genres)" value="Genres"></el-option>
@@ -56,10 +57,14 @@
                 <el-option label="工作室 (Studios)" value="Studios"></el-option>
                 <el-option label="视频范围 (VideoRange)" value="VideoRange"></el-option>
                 <el-option label="文件容器 (Container)" value="Container"></el-option>
+                <el-option label="名称以...开头 (NameStartsWith)" value="NameStartsWith"></el-option>
+                <el-option label="剧集状态 (SeriesStatus)" value="SeriesStatus"></el-option>
                 <el-option label="是否为电影 (IsMovie)" value="IsMovie"></el-option>
                 <el-option label="是否为剧集 (IsSeries)" value="IsSeries"></el-option>
                 <el-option label="已播放 (IsPlayed)" value="IsPlayed"></el-option>
                 <el-option label="未播放 (IsUnplayed)" value="IsUnplayed"></el-option>
+                <el-option label="有字幕 (HasSubtitles)" value="HasSubtitles"></el-option>
+                <el-option label="有官方评级 (HasOfficialRating)" value="HasOfficialRating"></el-option>
                 <el-option label="拥有TMDB ID (ProviderIds.Tmdb)" value="ProviderIds.Tmdb"></el-option>
                 <el-option label="拥有IMDB ID (ProviderIds.Imdb)" value="ProviderIds.Imdb"></el-option>
                 <el-option label="名称 (Name)" value="Name"></el-option>
@@ -166,6 +171,7 @@ const helpDialogVisible = ref(false);
 
 const efficientRulesTableData = ref([
   { field: '社区评分 (CommunityRating)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选数字评分。例：大于 <code>7.5</code>' },
+  { field: '影评人评分 (CriticRating)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选数字评分。例：大于 <code>80</code>' },
   { field: '发行年份 (ProductionYear)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选年份。例：等于 <code>2023</code>' },
   { field: '官方分级 (OfficialRating)', operators: '<el-tag size="small">等于</el-tag>', notes: '例：等于 <code>PG-13</code> (输入时不含引号)' },
   { field: '类型 (Genres)', operators: '<el-tag size="small">等于</el-tag>', notes: '效果为“包含该类型”。例：等于 <code>动作</code> (输入时不含引号)' },
@@ -173,10 +179,14 @@ const efficientRulesTableData = ref([
   { field: '工作室 (Studios)', operators: '<el-tag size="small">等于</el-tag>', notes: '效果为“包含该工作室”。例：等于 <code>Disney</code> (输入时不含引号)' },
   { field: '视频范围 (VideoRange)', operators: '<el-tag size="small">等于</el-tag>', notes: '例：等于 <code>HDR</code> (输入时不含引号)' },
   { field: '文件容器 (Container)', operators: '<el-tag size="small">等于</el-tag>', notes: '例：等于 <code>mkv</code> (输入时不含引号)' },
+  { field: '名称以...开头 (NameStartsWith)', operators: '<el-tag size="small">等于</el-tag>', notes: '例：等于 <code>The</code>' },
+  { field: '剧集状态 (SeriesStatus)', operators: '<el-tag size="small">等于</el-tag>', notes: '值为 <code>Continuing</code> 或 <code>Ended</code>' },
   { field: '是否为电影 (IsMovie)', operators: '<el-tag size="small">等于</el-tag>', notes: '值为 <code>true</code> 或 <code>false</code>' },
   { field: '是否为剧集 (IsSeries)', operators: '<el-tag size="small">等于</el-tag>', notes: '值为 <code>true</code> 或 <code>false</code>' },
   { field: '已播放 (IsPlayed)', operators: '<el-tag size="small">等于</el-tag>', notes: '值为 <code>true</code> 或 <code>false</code>' },
   { field: '未播放 (IsUnplayed)', operators: '<el-tag size="small">等于</el-tag>', notes: '值为 <code>true</code> 或 <code>false</code>' },
+  { field: '有字幕 (HasSubtitles)', operators: '<el-tag size="small">等于</el-tag>', notes: '值为 <code>true</code> 或 <code>false</code>' },
+  { field: '有官方评级 (HasOfficialRating)', operators: '<el-tag size="small">等于</el-tag>', notes: '值为 <code>true</code> 或 <code>false</code>' },
   { field: '拥有TMDB ID', operators: '<el-tag type="success" size="small">不为空</el-tag><el-tag type="danger" size="small">为空</el-tag>', notes: '选择此操作后，<strong>无需填写</strong>任何值。' },
   { field: '拥有IMDB ID', operators: '<el-tag type="success" size="small">不为空</el-tag><el-tag type="danger" size="small">为空</el-tag>', notes: '选择此操作后，<strong>无需填写</strong>任何值。' },
 ]);

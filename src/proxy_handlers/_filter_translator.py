@@ -22,6 +22,7 @@ OPERATOR_MAP = {
 # 对于 'greater_than'/'less_than'，我们使用 (Min-Param, Max-Param) 的元组
 FIELD_MAP = {
     "CommunityRating": ("MinCommunityRating", "MaxCommunityRating"),
+    "CriticRating": ("MinCriticRating", "MaxCriticRating"),
     "OfficialRating": "OfficialRatings",
     "ProductionYear": ("MinPremiereDate", "MaxPremiereDate"), # 将年份转换为日期
     "Genres": "Genres",
@@ -29,11 +30,15 @@ FIELD_MAP = {
     "Studios": "Studios",
     "VideoRange": "VideoTypes", # 例如 'HDR', 'SDR'
     "Container": "Containers",
+    "NameStartsWith": "NameStartsWith",
+    "SeriesStatus": "SeriesStatus",
     # 布尔类型的特殊字段
     "IsMovie": "IsMovie",
     "IsSeries": "IsSeries",
     "IsPlayed": "IsPlayed",
     "IsUnplayed": "IsUnplayed",
+    "HasSubtitles": "HasSubtitles",
+    "HasOfficialRating": "HasOfficialRating",
     # 存在性检查
     "ProviderIds.Tmdb": "HasTmdbId",
     "ProviderIds.Imdb": "HasImdbId",
