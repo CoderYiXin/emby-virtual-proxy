@@ -13,6 +13,7 @@ class AdvancedFilterRule(BaseModel):
         "is_empty", "is_not_empty"
     ]
     value: Optional[str] = None
+    relative_days: Optional[int] = None # 新增：用于存储相对日期（例如 30 天）
 
 class AdvancedFilter(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))

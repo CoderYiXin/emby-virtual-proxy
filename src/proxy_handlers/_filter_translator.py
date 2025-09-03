@@ -3,6 +3,7 @@
 import logging
 from typing import List, Dict, Any, Tuple
 from models import AdvancedFilterRule
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ FIELD_MAP = {
     "CriticRating": ("MinCriticRating", "MaxCriticRating"),
     "OfficialRating": "OfficialRatings",
     "ProductionYear": ("MinPremiereDate", "MaxPremiereDate"), # 将年份转换为日期
+    "PremiereDate": ("MinPremiereDate", "MaxPremiereDate"),   # 新增：首播日期
     "Genres": "Genres",
     "Tags": "Tags",
     "Studios": "Studios",
@@ -65,6 +67,15 @@ def translate_rules(rules: List[AdvancedFilterRule]) -> Tuple[Dict[str, Any], Li
         value = rule.value
         translated = False
 
+        # 新增：处理相对日期
+        if rule.relative_days and field == "PremiereDate":
+            # 计算目标日期
+            target_date = datetime.utcnow() - timedelta(days=rule.relative_days)
+            # 将其格式化为字符串，并赋值给 value 变量，以便后续逻辑复用
+            value = target_date.strftime('%Y-%m-%d')
+            # 确保操作符是 greater_than
+            operator = "greater_than"
+
         if operator == "is_not_empty":
             if field in FIELD_MAP and isinstance(FIELD_MAP[field], str) and FIELD_MAP[field].startswith("Has"):
                 emby_native_params[FIELD_MAP[field]] = "true"
@@ -91,6 +102,11 @@ def translate_rules(rules: List[AdvancedFilterRule]) -> Tuple[Dict[str, Any], Li
                         emby_native_params[min_param] = f"{value}-01-01T00:00:00.000Z"
                         emby_native_params[max_param] = f"{value}-12-31T23:59:59.999Z"
                         translated = True
+                    # 新增：对首播日期的精确匹配
+                    elif field == "PremiereDate":
+                        emby_native_params[min_param] = f"{value}T00:00:00.000Z"
+                        emby_native_params[max_param] = f"{value}T23:59:59.999Z"
+                        translated = True
                     else: # 其他字段的 equals
                         param_name = f"{param_template[0].replace('Min','')}" # 假设是 CommunityRating
                 else:
@@ -101,6 +117,10 @@ def translate_rules(rules: List[AdvancedFilterRule]) -> Tuple[Dict[str, Any], Li
                     if field == "ProductionYear":
                         # aiohttp 会自动编码，这里不需要手动处理
                         emby_native_params[param_name] = f"{value}-01-01T00:00:00.000Z" if operator == "greater_than" else f"{value}-12-31T23:59:59.999Z"
+                    # 新增：对首播日期的处理
+                    elif field == "PremiereDate":
+                        # 假设 value 是 'YYYY-MM-DD' 格式
+                        emby_native_params[param_name] = f"{value}T00:00:00.000Z" if operator == "greater_than" else f"{value}T23:59:59.999Z"
                     else:
                         emby_native_params[param_name] = value
                     translated = True

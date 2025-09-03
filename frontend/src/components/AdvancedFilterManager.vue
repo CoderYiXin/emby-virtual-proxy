@@ -52,6 +52,7 @@
                 <el-option label="影评人评分 (CriticRating)" value="CriticRating"></el-option>
                 <el-option label="官方分级 (OfficialRating)" value="OfficialRating"></el-option>
                 <el-option label="发行年份 (ProductionYear)" value="ProductionYear"></el-option>
+                <el-option label="首播日期 (PremiereDate)" value="PremiereDate"></el-option>
                 <el-option label="类型 (Genres)" value="Genres"></el-option>
                 <el-option label="标签 (Tags)" value="Tags"></el-option>
                 <el-option label="工作室 (Studios)" value="Studios"></el-option>
@@ -79,7 +80,34 @@
                 <el-option label="为空" value="is_empty"></el-option>
                 <el-option label="不为空" value="is_not_empty"></el-option>
             </el-select>
-            <el-input v-model="rule.value" placeholder="输入值" style="flex-grow: 1; margin-right: 10px;" v-if="!['is_empty', 'is_not_empty'].includes(rule.operator)"></el-input>
+            <!-- 根据字段类型动态显示输入控件 -->
+            <template v-if="!['is_empty', 'is_not_empty'].includes(rule.operator)">
+              <div v-if="rule.field === 'PremiereDate'" style="display: flex; flex-grow: 1; margin-right: 10px;">
+                <el-date-picker
+                  v-model="rule.value"
+                  type="date"
+                  placeholder="选择日期"
+                  value-format="YYYY-MM-DD"
+                  style="flex-grow: 1;"
+                  :disabled="!!rule.relative_days"
+                />
+                <el-input-number
+                  :model-value="rule.relative_days"
+                  @change="setRelativeDate(rule, $event)"
+                  placeholder="最近N天内"
+                  :min="1"
+                  controls-position="right"
+                  style="width: 150px; margin-left: 10px;"
+                />
+                <el-button text @click="setRelativeDate(rule, null)" v-if="rule.relative_days" style="margin-left: 5px;">清除</el-button>
+              </div>
+              <el-input 
+                v-else 
+                v-model="rule.value" 
+                placeholder="输入值" 
+                style="flex-grow: 1; margin-right: 10px;"
+              ></el-input>
+            </template>
             <el-button type="danger" :icon="Delete" circle @click="removeRule(index)"></el-button>
         </div>
 
@@ -169,10 +197,22 @@ const currentFilter = ref(null);
 
 const helpDialogVisible = ref(false);
 
+// 修改：设置相对日期的方法
+const setRelativeDate = (rule, days) => {
+  if (days) {
+    rule.relative_days = days;
+    rule.value = null; // 清除绝对日期以避免混淆
+    rule.operator = 'greater_than'; // 自动将操作符设置为“大于”
+  } else {
+    rule.relative_days = null; // 清除相对日期
+  }
+};
+
 const efficientRulesTableData = ref([
   { field: '社区评分 (CommunityRating)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选数字评分。例：大于 <code>7.5</code>' },
   { field: '影评人评分 (CriticRating)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选数字评分。例：大于 <code>80</code>' },
   { field: '发行年份 (ProductionYear)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选年份。例：等于 <code>2023</code>' },
+  { field: '首播日期 (PremiereDate)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选确切日期。例：大于 <code>2023-01-01</code><br>💡 支持输入相对时间。' },
   { field: '官方分级 (OfficialRating)', operators: '<el-tag size="small">等于</el-tag>', notes: '例：等于 <code>PG-13</code> (输入时不含引号)' },
   { field: '类型 (Genres)', operators: '<el-tag size="small">等于</el-tag>', notes: '效果为“包含该类型”。例：等于 <code>动作</code> (输入时不含引号)' },
   { field: '标签 (Tags)', operators: '<el-tag size="small">等于</el-tag>', notes: '效果为“包含该标签”。例：等于 <code>4K臻享</code> (输入时不含引号)' },
@@ -213,6 +253,7 @@ const addRule = () => {
     field: '',
     operator: 'equals',
     value: '',
+    relative_days: null, // 确保新规则对象包含此字段
   });
 };
 
