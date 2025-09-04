@@ -47,7 +47,7 @@
         
         <!-- 【【【 MODIFIED: 优化了规则行的布局 】】】 -->
         <div v-for="(rule, index) in currentFilter.rules" :key="index" class="rule-row">
-            <el-select v-model="rule.field" placeholder="选择字段" style="width: 280px; margin-right: 10px; flex-shrink: 0;">
+            <el-select v-model="rule.field" placeholder="选择字段" style="width: 280px; flex-shrink: 0;">
                 <el-option label="社区评分 (CommunityRating)" value="CommunityRating"></el-option>
                 <el-option label="影评人评分 (CriticRating)" value="CriticRating"></el-option>
                 <el-option label="官方分级 (OfficialRating)" value="OfficialRating"></el-option>
@@ -70,7 +70,7 @@
                 <el-option label="拥有IMDB ID (ProviderIds.Imdb)" value="ProviderIds.Imdb"></el-option>
                 <el-option label="名称 (Name)" value="Name"></el-option>
             </el-select>
-            <el-select v-model="rule.operator" placeholder="选择操作" style="width: 150px; margin-right: 10px; flex-shrink: 0;">
+            <el-select v-model="rule.operator" placeholder="选择操作" style="width: 150px; flex-shrink: 0;">
                 <el-option label="等于" value="equals"></el-option>
                 <el-option label="不等于" value="not_equals"></el-option>
                 <el-option label="包含" value="contains"></el-option>
@@ -82,13 +82,13 @@
             </el-select>
             <!-- 根据字段类型动态显示输入控件 -->
             <template v-if="!['is_empty', 'is_not_empty'].includes(rule.operator)">
-              <div v-if="rule.field === 'PremiereDate'" style="display: flex; flex-grow: 1; margin-right: 10px;">
+              <div v-if="rule.field === 'PremiereDate'" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex-grow: 1;">
                 <el-date-picker
                   v-model="rule.value"
                   type="date"
                   placeholder="选择日期"
                   value-format="YYYY-MM-DD"
-                  style="flex-grow: 1;"
+                  style="flex-grow: 1; min-width: 140px; max-width: 150px;"
                   :disabled="!!rule.relative_days"
                 />
                 <el-input-number
@@ -97,15 +97,15 @@
                   placeholder="最近N天内"
                   :min="1"
                   controls-position="right"
-                  style="width: 150px; margin-left: 10px;"
+                  style="width: 150px;"
                 />
-                <el-button text @click="setRelativeDate(rule, null)" v-if="rule.relative_days" style="margin-left: 5px;">清除</el-button>
+                <el-button text @click="setRelativeDate(rule, null)" v-if="rule.relative_days">清除</el-button>
               </div>
               <el-input 
                 v-else 
                 v-model="rule.value" 
                 placeholder="输入值" 
-                style="flex-grow: 1; margin-right: 10px;"
+                style="flex-grow: 1; min-width: 125px; max-width: 150px;"
               ></el-input>
             </template>
             <el-button type="danger" :icon="Delete" circle @click="removeRule(index)"></el-button>
@@ -307,6 +307,8 @@ const deleteFilter = async (id) => {
   display: flex;
   align-items: center;
   margin-bottom: 10px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 /* 使用 :deep() 以确保样式能应用到 v-html 和 el-tag 组件 */
