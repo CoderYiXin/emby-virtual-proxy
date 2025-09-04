@@ -39,11 +39,12 @@ class DoubanProcessor(BaseRssProcessor):
             logger.warning(f"检查 douban_tmdb_mapping 表时出错: {e}")
 
     def _parse_source_ids(self, xml_content):
-        """从 RSS XML 中解析出豆瓣 ID、标题和年份"""
+        """从 RSS XML 中解析出豆瓣 ID、标题和年份。如果ID不存在，则尝试从描述中解析。"""
         soup = BeautifulSoup(xml_content, 'xml')
         items_data = []
         for item in soup.find_all('item'):
-            link = item.find('link').text
+            link_tag = item.find('link')
+            link = link_tag.text if link_tag else ''
             title_text = item.find('title').text
             
             douban_id_match = re.search(r'douban.com/subject/(\d+)', link)
@@ -65,7 +66,40 @@ class DoubanProcessor(BaseRssProcessor):
                     "title": title,
                     "year": year
                 })
-        logger.info(f"从 RSS 源中找到 {len(items_data)} 个豆瓣条目。")
+            else:
+                # 如果没有豆瓣ID，尝试从 description 中解析
+                logger.info(f"条目 '{title_text}' 缺少豆瓣ID，尝试从描述中解析。")
+                description_tag = item.find('description')
+                if not description_tag:
+                    logger.warning(f"条目 '{title_text}' 既无豆瓣ID也无描述，已跳过。")
+                    continue
+
+                description_html = description_tag.text
+                desc_soup = BeautifulSoup(description_html, 'html.parser')
+                p_tags = desc_soup.find_all('p')
+                
+                year = None
+                # 豆瓣RSSHub格式通常是：<p>标题</p><p>评分</p><p>年份 / 国家 / ...</p>
+                if len(p_tags) > 1:
+                    # 年份信息通常在最后一个p标签
+                    info_line = p_tags[-1].text
+                    year_match = re.search(r'^\s*(\d{4})', info_line)
+                    if year_match:
+                        year = int(year_match.group(1))
+
+                title = title_text.strip()
+                
+                items_data.append({
+                    "id": None,  # id为None以触发兜底匹配
+                    "title": title,
+                    "year": year
+                })
+                if year:
+                    logger.info(f"成功从描述中解析出年份: {year}，标题: {title}")
+                else:
+                    logger.warning(f"未能从描述中解析出年份，标题: {title}")
+
+        logger.info(f"从 RSS 源中共解析出 {len(items_data)} 个条目。")
         return items_data
 
     def _get_tmdb_info(self, source_info):
