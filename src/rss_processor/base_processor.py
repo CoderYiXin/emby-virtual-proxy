@@ -176,8 +176,8 @@ class BaseRssProcessor:
         
         self._precache_tmdb_info()
 
-    def _find_items_in_emby(self, tmdb_ids_map, item_types="Movie,Series"):
-        """通过调用 Emby API 查找已存在的项目"""
+    def _find_items_in_emby(self, tmdb_ids_map):
+        """通过调用 Emby API 查找已存在的项目，并根据每个项目的具体类型进行精确查询"""
         if not tmdb_ids_map or not self.config.emby_url or not self.config.emby_api_key:
             return {}
 
@@ -187,7 +187,19 @@ class BaseRssProcessor:
         url = f"{self.config.emby_url.rstrip('/')}/Items"
         headers = {"X-Emby-Token": self.config.emby_api_key}
 
-        for tmdb_id in tmdb_ids_map.keys():
+        # 【核心修复】遍历 tmdb_ids_map 的所有项，以同时获取 tmdb_id 和 media_type
+        for tmdb_id, media_type in tmdb_ids_map.items():
+            # 根据 media_type 确定要查询的 Emby 项目类型
+            # 注意：我们前端保存的是 'Movie'/'TV'，而 TMDB API 返回的是 'movie'/'tv'
+            if media_type.lower() == 'movie':
+                item_types = "Movie"
+            elif media_type.lower() == 'tv':
+                item_types = "Series"
+            else:
+                # 对于未知类型，默认同时查找两者以保持兼容性
+                item_types = "Movie,Series"
+                logger.warning(f"TMDB ID {tmdb_id} 的媒体类型 '{media_type}' 未知，将同时搜索电影和剧集。")
+
             params = {
                 "Recursive": "true",
                 "IncludeItemTypes": item_types,
@@ -195,6 +207,7 @@ class BaseRssProcessor:
                 "TmdbId": tmdb_id
             }
             try:
+                logger.info(f"  - 正在为 TMDB ID {tmdb_id} 查询 Emby 中的 '{item_types}'...")
                 response = requests.get(url, headers=headers, params=params, timeout=10)
                 response.raise_for_status()
                 results = response.json().get("Items", [])
@@ -214,6 +227,7 @@ class BaseRssProcessor:
 
     def _match_items_in_emby(self, tmdb_ids_map):
         """获取所有项目的 TMDB ID，查询 Emby，并更新数据库"""
+        # 【核心修复】移除子类中重写的 _find_items_in_emby 方法，因为现在基类方法已足够智能
         emby_id_map = self._find_items_in_emby(tmdb_ids_map)
         update_count = 0
         for tmdb_id, emby_item_id in emby_id_map.items():

@@ -61,7 +61,3 @@ class BangumiProcessor(BaseRssProcessor):
         except requests.RequestException as e:
             logger.error(f"调用 Bangumi 到 TMDB 匹配 API 失败 (ID: {bangumi_id}): {e}")
             return []
-
-    def _find_items_in_emby(self, tmdb_ids_map):
-        """重写此方法以专门查找 'Series' 类型"""
-        return super()._find_items_in_emby(tmdb_ids_map, item_types="Series")
