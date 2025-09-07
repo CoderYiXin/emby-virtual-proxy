@@ -13,9 +13,10 @@ logger = logging.getLogger(__name__)
 DB_DIR = Path(__file__).parent.parent.parent / "config"
 
 class BaseRssProcessor:
-    def __init__(self, library_id, rsshub_url):
-        self.library_id = library_id
-        self.rsshub_url = rsshub_url
+    def __init__(self, vlib):
+        self.vlib = vlib
+        self.library_id = vlib.id
+        self.rsshub_url = vlib.rsshub_url
         self.rss_db = DBManager(RSS_CACHE_DB)
         self.tmdb_cache_db = DBManager(TMDB_CACHE_DB)
         self.rss_library_db = DBManager(DB_DIR / "rss_library_items.db")
@@ -156,6 +157,19 @@ class BaseRssProcessor:
             processed_count += 1
         
         logger.info(f"RSS 媒体库 {self.library_id} TMDB 匹配完成。共处理 {processed_count}/{total_items} 个项目。")
+
+        # 【核心修改】检查并追加手动指定的 TMDB ID
+        if self.vlib.fallback_tmdb_id and self.vlib.fallback_tmdb_type:
+            logger.info(f"正在为媒体库 {self.library_id} 追加手动指定的 TMDB ID: {self.vlib.fallback_tmdb_id}")
+            tmdb_id = self.vlib.fallback_tmdb_id
+            media_type = self.vlib.fallback_tmdb_type
+            self.rss_library_db.execute(
+                "INSERT OR IGNORE INTO rss_library_items (library_id, tmdb_id, media_type, emby_item_id) VALUES (?, ?, ?, NULL)",
+                (self.library_id, tmdb_id, media_type),
+                commit=True
+            )
+            if tmdb_id not in tmdb_ids_map:
+                tmdb_ids_map[tmdb_id] = media_type
         
         if tmdb_ids_map:
             self._match_items_in_emby(tmdb_ids_map)

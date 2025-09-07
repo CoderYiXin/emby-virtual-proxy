@@ -7,8 +7,8 @@ from .base_processor import BaseRssProcessor
 logger = logging.getLogger(__name__)
 
 class BangumiProcessor(BaseRssProcessor):
-    def __init__(self, library_id, rsshub_url):
-        super().__init__(library_id, rsshub_url)
+    def __init__(self, vlib):
+        super().__init__(vlib)
 
     def _parse_source_ids(self, xml_content):
         """从 RSS XML 中解析出 Bangumi ID、标题和年份"""

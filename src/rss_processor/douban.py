@@ -12,8 +12,8 @@ logger = logging.getLogger(__name__)
 DOUBAN_API_RATE_LIMIT = 2  # 秒
 
 class DoubanProcessor(BaseRssProcessor):
-    def __init__(self, library_id, rsshub_url):
-        super().__init__(library_id, rsshub_url)
+    def __init__(self, vlib):
+        super().__init__(vlib)
         self.douban_db = DBManager(DOUBAN_CACHE_DB)
         self.last_api_call_time = 0
         self._init_db()

@@ -30,6 +30,8 @@ class VirtualLibrary(BaseModel):
     image_tag: Optional[str] = None # <-- 【新增】用于存储图片的唯一标签
     rsshub_url: Optional[str] = None # <-- 【新增】RSSHUB链接
     rss_type: Optional[Literal["douban", "bangumi"]] = None # <-- 【新增】RSS类型
+    fallback_tmdb_id: Optional[str] = None # <-- 【新增】RSS库的兜底TMDB ID
+    fallback_tmdb_type: Optional[Literal["Movie", "TV"]] = None # <-- 【新增】RSS库的兜底TMDB类型
     advanced_filter_id: Optional[str] = None
     merge_by_tmdb_id: bool = Field(default=False)
     order: int = 0

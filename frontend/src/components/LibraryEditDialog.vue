@@ -34,6 +34,17 @@
         </el-select>
       </el-form-item>
 
+      <el-form-item label="追加 TMDB ID" v-if="store.currentLibrary.resource_type === 'rsshub'">
+        <el-input v-model="store.currentLibrary.fallback_tmdb_id" placeholder="可选，额外追加一个指定的影视项目"></el-input>
+      </el-form-item>
+
+      <el-form-item label="追加类型" v-if="store.currentLibrary.resource_type === 'rsshub' && store.currentLibrary.fallback_tmdb_id">
+        <el-select v-model="store.currentLibrary.fallback_tmdb_type" placeholder="请选择要追加的 TMDB 项目类型">
+          <el-option label="电影 (Movie)" value="Movie"></el-option>
+          <el-option label="电视剧 (TV)" value="TV"></el-option>
+        </el-select>
+      </el-form-item>
+
       <el-form-item label="选择资源" required v-if="store.currentLibrary.resource_type !== 'all' && store.currentLibrary.resource_type !== 'rsshub'">
         <el-select 
           v-model="store.currentLibrary.resource_id"

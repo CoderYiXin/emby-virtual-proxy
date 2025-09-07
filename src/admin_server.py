@@ -326,11 +326,11 @@ async def refresh_rss_library_internal(vlib: VirtualLibrary):
     try:
         if vlib.rss_type == "douban":
             from rss_processor.douban import DoubanProcessor
-            processor = DoubanProcessor(vlib.id, vlib.rsshub_url)
+            processor = DoubanProcessor(vlib)
             processor.process()
         elif vlib.rss_type == "bangumi":
             from rss_processor.bangumi import BangumiProcessor
-            processor = BangumiProcessor(vlib.id, vlib.rsshub_url)
+            processor = BangumiProcessor(vlib)
             processor.process()
         else:
             logger.warning(f"Unknown RSS type: {vlib.rss_type} for library {vlib.id}")

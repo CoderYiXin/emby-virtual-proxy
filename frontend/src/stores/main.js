@@ -297,7 +297,9 @@ export const useMainStore = defineStore('main', {
             resource_type: 'collection', 
             resource_id: '',
             merge_by_tmdb_id: false,
-            image_tag: null
+            image_tag: null,
+            fallback_tmdb_id: null,
+            fallback_tmdb_type: null
         };
         this.dialogVisible = true;
     },
