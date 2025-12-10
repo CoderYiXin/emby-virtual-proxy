@@ -3,6 +3,7 @@ import time
 import requests
 import json
 import logging
+import difflib
 from pathlib import Path
 from bs4 import BeautifulSoup
 from db_manager import DBManager, RSS_CACHE_DB, TMDB_CACHE_DB
@@ -21,6 +22,15 @@ class BaseRssProcessor:
         self.tmdb_cache_db = DBManager(TMDB_CACHE_DB)
         self.rss_library_db = DBManager(DB_DIR / "rss_library_items.db")
         self.config = config_manager.load_config()
+        
+        # 定义去后缀的正则列表 (用于通用 TMDB 搜索优化)
+        self.truncation_patterns = [
+            re.compile(r'\s*第[一二三四五六七八九十\d]+[季期].*$', re.IGNORECASE),
+            re.compile(r'\s*Season\s*\d+.*$', re.IGNORECASE),
+            re.compile(r'\s*Part\s*\d+.*$', re.IGNORECASE),
+            re.compile(r'\s*Cour\s*\d+.*$', re.IGNORECASE),
+            re.compile(r'\s*-\s*season\s*\d+.*$', re.IGNORECASE),
+        ]
 
     def _fetch_rss_content(self):
         """获取并缓存 RSS 内容，缓存有效期为30分钟"""
@@ -70,18 +80,33 @@ class BaseRssProcessor:
 
         # 替换全角'｜'为半角'|'，然后拆分为多个标题进行尝试
         normalized_title = title.replace('｜', '|')
-        titles_to_try = [t.strip() for t in normalized_title.split('|')]
+        raw_titles = [t.strip() for t in normalized_title.split('|') if t.strip()]
+        
+        # 构建搜索候选词列表：包含原始标题和去后缀后的标题
+        search_queries = []
+        for raw in raw_titles:
+            search_queries.append(raw)
+            # 尝试去后缀
+            cleaned = raw
+            for pattern in self.truncation_patterns:
+                cleaned = pattern.sub('', cleaned)
+            cleaned = cleaned.strip()
+            if cleaned and cleaned != raw:
+                search_queries.append(cleaned)
+        
+        # 去重并保持顺序
+        search_queries = list(dict.fromkeys(search_queries))
         
         proxies = {"http": self.config.tmdb_proxy, "https": self.config.tmdb_proxy} if self.config.tmdb_proxy else None
+        
+        best_candidate = None
+        best_score = 0
+        THRESHOLD = 0.6 # 相似度阈值 (0-1)
 
-        for current_title in titles_to_try:
-            if not current_title: # 跳过空的标题
-                continue
-            
+        for current_title in search_queries:
             logger.info(f"正在尝试搜索标题: '{current_title}'...")
+            # 注意：/search/multi 不支持 year 参数，我们必须在代码里过滤
             url = f"https://api.themoviedb.org/3/search/multi?api_key={self.config.tmdb_api_key}&query={requests.utils.quote(current_title)}&language=zh-CN"
-            if year:
-                url += f"&year={year}"
             
             try:
                 response = requests.get(url, proxies=proxies, timeout=10)
@@ -90,25 +115,64 @@ class BaseRssProcessor:
                 results = data.get("results", [])
 
                 if not results:
-                    # 这个标题没找到，继续尝试下一个
                     continue
 
-                # 简单的匹配逻辑：选择第一个电影或电视剧结果
                 for result in results:
                     media_type = result.get("media_type")
-                    if media_type in ["movie", "tv"]:
-                        tmdb_id = result.get("id")
-                        logger.info(f"通用搜索成功: '{current_title}' -> TMDB ID {tmdb_id} ({media_type})")
-                        # 找到一个就立刻返回
-                        return [(str(tmdb_id), media_type)]
-                
+                    if media_type not in ["movie", "tv"]:
+                        continue
+                    
+                    tmdb_id = result.get("id")
+                    res_title = result.get("title") if media_type == "movie" else result.get("name")
+                    res_orig_title = result.get("original_title") if media_type == "movie" else result.get("original_name")
+                    
+                    # 获取结果年份
+                    res_date = result.get("release_date") if media_type == "movie" else result.get("first_air_date")
+                    res_year = int(res_date.split('-')[0]) if res_date else 0
+
+                    # --- 打分逻辑 ---
+                    score = 0
+                    
+                    # 1. 文本相似度 (0.0 - 1.0)
+                    sim_title = difflib.SequenceMatcher(None, current_title.lower(), (res_title or "").lower()).ratio()
+                    sim_orig = difflib.SequenceMatcher(None, current_title.lower(), (res_orig_title or "").lower()).ratio()
+                    text_score = max(sim_title, sim_orig)
+                    
+                    # 基础分
+                    score += text_score * 10 
+
+                    # 2. 年份匹配奖励
+                    if year and res_year:
+                        diff = abs(year - res_year)
+                        if diff == 0:
+                            score += 5 # 完美匹配
+                        elif diff == 1:
+                            score += 3 # 差一年也算不错
+                        else:
+                            score -= 2 # 年份差太多扣分
+                    
+                    # 3. 标题完全匹配奖励 (针对去后缀后的短标题)
+                    if text_score == 1.0:
+                        score += 2
+
+                    logger.debug(f"  - 候选: {res_title} ({res_year}) [ID:{tmdb_id}] -得分: {score:.2f}")
+
+                    if score > best_score:
+                        best_score = score
+                        best_candidate = (str(tmdb_id), media_type)
+
             except requests.RequestException as e:
                 logger.error(f"通用 TMDB 搜索 API 请求失败 (标题: '{current_title}'): {e}")
-                # 如果一个标题请求失败，继续尝试下一个
                 continue
         
-        # 所有标题都尝试过后，仍然没有找到结果
-        logger.warning(f"通用搜索未能为任何备选标题 '{title}' 找到任何 TMDB 结果。")
+        # 设定一个总分及格线，防止匹配到完全不相干的东西
+        # 基础分如果完全匹配是10分，年份匹配是5分，满分约17分
+        # 如果只有文字相似度高，也能有8-10分
+        if best_candidate and best_score > 7:
+            logger.info(f"通用搜索最佳匹配: {best_candidate} (得分: {best_score:.2f})")
+            return [best_candidate]
+        
+        logger.warning(f"通用搜索未能找到得分为高 ({best_score:.2f}) 的结果。")
         return []
 
     def process(self):
