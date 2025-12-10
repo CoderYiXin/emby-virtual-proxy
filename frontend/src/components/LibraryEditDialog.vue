@@ -34,6 +34,20 @@
         </el-select>
       </el-form-item>
 
+      <el-form-item label="开启数据保留" v-if="store.currentLibrary.resource_type === 'rsshub'">
+        <el-switch v-model="store.currentLibrary.enable_retention"></el-switch>
+        <el-tooltip content="开启后，即使条目从 RSS 源中消失，也会在本地保留一段时间。关闭则每次刷新都会清空重建（与 RSS 源完全同步）。" placement="top">
+           <el-icon style="margin-left: 8px; color: #aaa;"><InfoFilled /></el-icon>
+        </el-tooltip>
+      </el-form-item>
+
+      <el-form-item label="保留天数" v-if="store.currentLibrary.resource_type === 'rsshub' && store.currentLibrary.enable_retention">
+        <el-input-number v-model="store.currentLibrary.retention_days" :min="0" :step="1"></el-input-number>
+        <el-tooltip content="条目首次被添加到库中后，在库中保留的最长天数。0 表示永久保留（不自动清理）。" placement="top">
+          <el-icon style="margin-left: 8px; color: #aaa;"><InfoFilled /></el-icon>
+        </el-tooltip>
+      </el-form-item>
+
       <el-form-item label="追加 TMDB ID" v-if="store.currentLibrary.resource_type === 'rsshub'">
         <el-input v-model="store.currentLibrary.fallback_tmdb_id" placeholder="可选，额外追加一个指定的影视项目"></el-input>
       </el-form-item>

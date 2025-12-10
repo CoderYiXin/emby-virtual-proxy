@@ -1,5 +1,6 @@
 import sqlite3
 import threading
+import datetime
 from pathlib import Path
 
 # 数据库文件都存放在 config 目录下
@@ -73,6 +74,7 @@ def init_databases():
     CREATE TABLE IF NOT EXISTS douban_api_cache (
         douban_id TEXT PRIMARY KEY,
         api_response TEXT,
+        name TEXT, -- 新增：存储条目名称
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """, commit=True)
@@ -81,9 +83,26 @@ def init_databases():
         douban_id TEXT PRIMARY KEY,
         tmdb_id TEXT,
         media_type TEXT,
+        match_method TEXT, -- 新增：存储匹配方法
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """, commit=True)
+
+    # --- 豆瓣数据库迁移 ---
+    try:
+        cursor = douban_db.execute("PRAGMA table_info(douban_api_cache)")
+        columns = [row['name'] for row in cursor.fetchall()]
+        if 'name' not in columns:
+             print("Adding 'name' column to 'douban_api_cache' table.")
+             douban_db.execute("ALTER TABLE douban_api_cache ADD COLUMN name TEXT", commit=True)
+
+        cursor = douban_db.execute("PRAGMA table_info(douban_tmdb_mapping)")
+        columns = [row['name'] for row in cursor.fetchall()]
+        if 'match_method' not in columns:
+             print("Adding 'match_method' column to 'douban_tmdb_mapping' table.")
+             douban_db.execute("ALTER TABLE douban_tmdb_mapping ADD COLUMN match_method TEXT", commit=True)
+    except Exception as e:
+        print(f"Error updating douban tables schema: {e}")
 
     # 初始化 Bangumi 缓存和映射数据库
     bangumi_db = DBManager(BANGUMI_CACHE_DB)
@@ -124,6 +143,7 @@ def init_databases():
         tmdb_id TEXT,
         media_type TEXT,
         emby_item_id TEXT, -- 新增：用于存储在 Emby 中匹配到的 Item ID
+        added_at DATETIME DEFAULT CURRENT_TIMESTAMP, -- 新增：添加时间，用于过期清理
         PRIMARY KEY (library_id, tmdb_id)
     )
     """, commit=True)
@@ -132,9 +152,17 @@ def init_databases():
     try:
         cursor = rss_library_db.execute("PRAGMA table_info(rss_library_items)")
         columns = [row['name'] for row in cursor.fetchall()]
+        
         if 'emby_item_id' not in columns:
             print("Adding 'emby_item_id' column to 'rss_library_items' table.")
             rss_library_db.execute("ALTER TABLE rss_library_items ADD COLUMN emby_item_id TEXT", commit=True)
+            
+        if 'added_at' not in columns:
+            print("Adding 'added_at' column to 'rss_library_items' table.")
+            # 为旧数据设置当前时间，避免被误删。使用固定时间字符串以兼容 SQLite 限制。
+            now_str = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            rss_library_db.execute(f"ALTER TABLE rss_library_items ADD COLUMN added_at DATETIME DEFAULT '{now_str}'", commit=True)
+            
     except Exception as e:
         print(f"Error updating rss_library_items table schema: {e}")
 

@@ -16,27 +16,6 @@ class DoubanProcessor(BaseRssProcessor):
         super().__init__(vlib)
         self.douban_db = DBManager(DOUBAN_CACHE_DB)
         self.last_api_call_time = 0
-        self._init_db()
-
-    def _init_db(self):
-        """初始化数据库，检查并添加缺失的列，以确保向后兼容性。"""
-        try:
-            cursor = self.douban_db.execute("PRAGMA table_info(douban_api_cache)")
-            columns = [row[1] for row in cursor.fetchall()]
-            if 'name' not in columns:
-                logger.info("douban_api_cache 表中缺少 'name' 列，正在添加...")
-                self.douban_db.execute("ALTER TABLE douban_api_cache ADD COLUMN name TEXT", commit=True)
-        except Exception as e:
-            logger.warning(f"检查 douban_api_cache 表时出错: {e}")
-
-        try:
-            cursor = self.douban_db.execute("PRAGMA table_info(douban_tmdb_mapping)")
-            columns = [row[1] for row in cursor.fetchall()]
-            if 'match_method' not in columns:
-                logger.info("douban_tmdb_mapping 表中缺少 'match_method' 列，正在添加...")
-                self.douban_db.execute("ALTER TABLE douban_tmdb_mapping ADD COLUMN match_method TEXT", commit=True)
-        except Exception as e:
-            logger.warning(f"检查 douban_tmdb_mapping 表时出错: {e}")
 
     def _parse_source_ids(self, xml_content):
         """从 RSS XML 中解析出豆瓣 ID、标题和年份。如果ID不存在，则尝试从描述中解析。"""

@@ -116,14 +116,19 @@ class BaseRssProcessor:
         logger.info(f"开始处理 RSS 媒体库 {self.library_id} (URL: {self.rsshub_url})")
         xml_content = self._fetch_rss_content()
         
-        logger.info(f"正在为媒体库 {self.library_id} 清理旧的项目...")
-        self.rss_library_db.execute("DELETE FROM rss_library_items WHERE library_id = ?", (self.library_id,), commit=True)
-        
+        # 【修改】根据 enable_retention 开关决定处理逻辑
+        if not self.vlib.enable_retention:
+            logger.info(f"数据保留功能未开启，正在为媒体库 {self.library_id} 清理旧的项目（全量刷新模式）...")
+            self.rss_library_db.execute("DELETE FROM rss_library_items WHERE library_id = ?", (self.library_id,), commit=True)
+        else:
+            logger.info(f"数据保留功能已开启，将执行增量更新和过期清理。")
+
         source_items = self._parse_source_ids(xml_content)
         
         tmdb_ids_map = {}
         processed_count = 0
         total_items = len(source_items)
+        current_time_str = time.strftime('%Y-%m-%d %H:%M:%S')
 
         for i, item_info in enumerate(source_items):
             source_id = item_info['id']
@@ -145,12 +150,29 @@ class BaseRssProcessor:
                 continue
 
             for tmdb_id, media_type in tmdb_results:
-                self.rss_library_db.execute(
-                    "INSERT OR IGNORE INTO rss_library_items (library_id, tmdb_id, media_type, emby_item_id) VALUES (?, ?, ?, NULL)",
-                    (self.library_id, tmdb_id, media_type),
-                    commit=True
-                )
-                logger.info(f"成功映射 '{title}' -> TMDB ID {tmdb_id} ({media_type}) 并保存至媒体库 {self.library_id}。")
+                if self.vlib.enable_retention:
+                    # 【保留模式】使用 INSERT OR REPLACE 来更新时间戳，实现“续命”
+                    existing = self.rss_library_db.fetchone(
+                        "SELECT emby_item_id FROM rss_library_items WHERE library_id = ? AND tmdb_id = ?",
+                        (self.library_id, tmdb_id)
+                    )
+                    emby_item_id = existing['emby_item_id'] if existing else None
+
+                    self.rss_library_db.execute(
+                        "INSERT OR REPLACE INTO rss_library_items (library_id, tmdb_id, media_type, emby_item_id, added_at) VALUES (?, ?, ?, ?, ?)",
+                        (self.library_id, tmdb_id, media_type, emby_item_id, current_time_str),
+                        commit=True
+                    )
+                    logger.info(f"成功映射 '{title}' -> TMDB ID {tmdb_id} ({media_type}) 并更新状态。")
+                else:
+                    # 【普通模式】直接插入，已存在则忽略（虽然因为前面已经清空了，基本都是新插入）
+                    self.rss_library_db.execute(
+                        "INSERT OR IGNORE INTO rss_library_items (library_id, tmdb_id, media_type, emby_item_id) VALUES (?, ?, ?, NULL)",
+                        (self.library_id, tmdb_id, media_type),
+                        commit=True
+                    )
+                    logger.info(f"成功映射 '{title}' -> TMDB ID {tmdb_id} ({media_type}) 并保存至媒体库 {self.library_id}。")
+
                 if tmdb_id not in tmdb_ids_map:
                     tmdb_ids_map[tmdb_id] = media_type
             
@@ -163,18 +185,44 @@ class BaseRssProcessor:
             logger.info(f"正在为媒体库 {self.library_id} 追加手动指定的 TMDB ID: {self.vlib.fallback_tmdb_id}")
             tmdb_id = self.vlib.fallback_tmdb_id
             media_type = self.vlib.fallback_tmdb_type
-            self.rss_library_db.execute(
-                "INSERT OR IGNORE INTO rss_library_items (library_id, tmdb_id, media_type, emby_item_id) VALUES (?, ?, ?, NULL)",
-                (self.library_id, tmdb_id, media_type),
-                commit=True
-            )
+            
+            if self.vlib.enable_retention:
+                existing = self.rss_library_db.fetchone(
+                    "SELECT emby_item_id FROM rss_library_items WHERE library_id = ? AND tmdb_id = ?",
+                    (self.library_id, tmdb_id)
+                )
+                emby_item_id = existing['emby_item_id'] if existing else None
+                
+                self.rss_library_db.execute(
+                    "INSERT OR REPLACE INTO rss_library_items (library_id, tmdb_id, media_type, emby_item_id, added_at) VALUES (?, ?, ?, ?, ?)",
+                    (self.library_id, tmdb_id, media_type, emby_item_id, current_time_str),
+                    commit=True
+                )
+            else:
+                 self.rss_library_db.execute(
+                    "INSERT OR IGNORE INTO rss_library_items (library_id, tmdb_id, media_type, emby_item_id) VALUES (?, ?, ?, NULL)",
+                    (self.library_id, tmdb_id, media_type),
+                    commit=True
+                )
+
             if tmdb_id not in tmdb_ids_map:
                 tmdb_ids_map[tmdb_id] = media_type
         
+        # 【新增】仅在开启保留功能时执行过期清理逻辑
+        if self.vlib.enable_retention and self.vlib.retention_days > 0:
+            logger.info(f"正在清理超过 {self.vlib.retention_days} 天未更新的过期项目...")
+            
+            deleted = self.rss_library_db.execute(
+                f"DELETE FROM rss_library_items WHERE library_id = ? AND added_at < datetime('now', 'localtime', '-{self.vlib.retention_days} days')",
+                (self.library_id,),
+                commit=True
+            )
+            logger.info(f"过期清理完成，共删除了 {deleted.rowcount} 个项目。")
+        elif self.vlib.enable_retention and self.vlib.retention_days == 0:
+            logger.info("保留天数设置为 0 (永久保留)，跳过过期清理。")
+        
         if tmdb_ids_map:
             self._match_items_in_emby(tmdb_ids_map)
-        
-        self._precache_tmdb_info()
 
     def _find_items_in_emby(self, tmdb_ids_map):
         """通过调用 Emby API 查找已存在的项目，并根据每个项目的具体类型进行精确查询"""

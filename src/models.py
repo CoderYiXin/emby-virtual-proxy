@@ -32,6 +32,8 @@ class VirtualLibrary(BaseModel):
     rss_type: Optional[Literal["douban", "bangumi"]] = None # <-- 【新增】RSS类型
     fallback_tmdb_id: Optional[str] = None # <-- 【新增】RSS库的兜底TMDB ID
     fallback_tmdb_type: Optional[Literal["Movie", "TV"]] = None # <-- 【新增】RSS库的兜底TMDB类型
+    enable_retention: bool = Field(default=False) # <-- 【新增】是否开启数据保留功能
+    retention_days: int = Field(default=7) # <-- 【新增】RSS项目保留天数，默认7天
     advanced_filter_id: Optional[str] = None
     merge_by_tmdb_id: bool = Field(default=False)
     order: int = 0
