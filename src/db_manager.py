@@ -9,6 +9,7 @@ DB_DIR.mkdir(exist_ok=True)
 # 为每个功能定义独立的数据库文件
 RSS_CACHE_DB = DB_DIR / "rss_cache.db"
 DOUBAN_CACHE_DB = DB_DIR / "douban_cache.db"
+BANGUMI_CACHE_DB = DB_DIR / "bangumi_cache.db"
 TMDB_CACHE_DB = DB_DIR / "tmdb_cache.db"
 
 class DBManager:
@@ -80,6 +81,26 @@ def init_databases():
         douban_id TEXT PRIMARY KEY,
         tmdb_id TEXT,
         media_type TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """, commit=True)
+
+    # 初始化 Bangumi 缓存和映射数据库
+    bangumi_db = DBManager(BANGUMI_CACHE_DB)
+    bangumi_db.execute("""
+    CREATE TABLE IF NOT EXISTS bangumi_api_cache (
+        bangumi_id TEXT PRIMARY KEY,
+        api_response TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+    """, commit=True)
+    bangumi_db.execute("""
+    CREATE TABLE IF NOT EXISTS bangumi_tmdb_mapping (
+        bangumi_id TEXT PRIMARY KEY,
+        tmdb_id TEXT,
+        media_type TEXT,
+        match_method TEXT,
+        score REAL,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
     )
     """, commit=True)
