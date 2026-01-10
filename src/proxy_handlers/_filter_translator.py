@@ -27,6 +27,7 @@ FIELD_MAP = {
     "OfficialRating": "OfficialRatings",
     "ProductionYear": ("MinPremiereDate", "MaxPremiereDate"), # 将年份转换为日期
     "PremiereDate": ("MinPremiereDate", "MaxPremiereDate"),   # 新增：首播日期
+    "DateCreated": ("MinDateCreated", "MaxDateCreated"),     # 新增：添加日期
     "Genres": "Genres",
     "Tags": "Tags",
     "Studios": "Studios",
@@ -68,7 +69,7 @@ def translate_rules(rules: List[AdvancedFilterRule]) -> Tuple[Dict[str, Any], Li
         translated = False
 
         # 新增：处理相对日期
-        if rule.relative_days and field == "PremiereDate":
+        if rule.relative_days and field in ["PremiereDate", "DateCreated"]:
             # 计算目标日期
             target_date = datetime.utcnow() - timedelta(days=rule.relative_days)
             # 将其格式化为字符串，并赋值给 value 变量，以便后续逻辑复用
@@ -102,8 +103,8 @@ def translate_rules(rules: List[AdvancedFilterRule]) -> Tuple[Dict[str, Any], Li
                         emby_native_params[min_param] = f"{value}-01-01T00:00:00.000Z"
                         emby_native_params[max_param] = f"{value}-12-31T23:59:59.999Z"
                         translated = True
-                    # 新增：对首播日期的精确匹配
-                    elif field == "PremiereDate":
+                    # 新增：对首播日期和添加日期的精确匹配
+                    elif field in ["PremiereDate", "DateCreated"]:
                         emby_native_params[min_param] = f"{value}T00:00:00.000Z"
                         emby_native_params[max_param] = f"{value}T23:59:59.999Z"
                         translated = True
@@ -117,8 +118,8 @@ def translate_rules(rules: List[AdvancedFilterRule]) -> Tuple[Dict[str, Any], Li
                     if field == "ProductionYear":
                         # aiohttp 会自动编码，这里不需要手动处理
                         emby_native_params[param_name] = f"{value}-01-01T00:00:00.000Z" if operator == "greater_than" else f"{value}-12-31T23:59:59.999Z"
-                    # 新增：对首播日期的处理
-                    elif field == "PremiereDate":
+                    # 新增：对日期字段的处理
+                    elif field in ["PremiereDate", "DateCreated"]:
                         # 假设 value 是 'YYYY-MM-DD' 格式
                         emby_native_params[param_name] = f"{value}T00:00:00.000Z" if operator == "greater_than" else f"{value}T23:59:59.999Z"
                     else:

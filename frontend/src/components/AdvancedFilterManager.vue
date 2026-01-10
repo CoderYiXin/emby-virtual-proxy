@@ -53,6 +53,7 @@
                 <el-option label="官方分级 (OfficialRating)" value="OfficialRating"></el-option>
                 <el-option label="发行年份 (ProductionYear)" value="ProductionYear"></el-option>
                 <el-option label="首播日期 (PremiereDate)" value="PremiereDate"></el-option>
+                <el-option label="添加日期 (DateCreated)" value="DateCreated"></el-option>
                 <el-option label="类型 (Genres)" value="Genres"></el-option>
                 <el-option label="标签 (Tags)" value="Tags"></el-option>
                 <el-option label="工作室 (Studios)" value="Studios"></el-option>
@@ -82,7 +83,7 @@
             </el-select>
             <!-- 根据字段类型动态显示输入控件 -->
             <template v-if="!['is_empty', 'is_not_empty'].includes(rule.operator)">
-              <div v-if="rule.field === 'PremiereDate'" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex-grow: 1;">
+              <div v-if="['PremiereDate', 'DateCreated'].includes(rule.field)" style="display: flex; flex-wrap: wrap; align-items: center; gap: 10px; flex-grow: 1;">
                 <el-date-picker
                   v-model="rule.value"
                   type="date"
@@ -212,7 +213,8 @@ const efficientRulesTableData = ref([
   { field: '社区评分 (CommunityRating)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选数字评分。例：大于 <code>7.5</code>' },
   { field: '影评人评分 (CriticRating)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选数字评分。例：大于 <code>80</code>' },
   { field: '发行年份 (ProductionYear)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选年份。例：等于 <code>2023</code>' },
-  { field: '首播日期 (PremiereDate)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选确切日期。例：大于 <code>2023-01-01</code><br>💡 支持输入相对时间。' },
+  { field: '首播日期 (PremiereDate)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选确切日期。例：大于 <code>2023-01-01</code><br>💡 支持输入最近 N 天。' },
+  { field: '添加日期 (DateCreated)', operators: '<el-tag type="info" size="small">大于</el-tag><el-tag type="info" size="small">小于</el-tag><el-tag type="info" size="small">等于</el-tag>', notes: '用于筛选项目添加到库的时间。例：大于 <code>2023-01-01</code><br>💡 支持输入最近 N 天。' },
   { field: '官方分级 (OfficialRating)', operators: '<el-tag size="small">等于</el-tag>', notes: '例：等于 <code>PG-13</code> (输入时不含引号)' },
   { field: '类型 (Genres)', operators: '<el-tag size="small">等于</el-tag>', notes: '效果为“包含该类型”。例：等于 <code>动作</code> (输入时不含引号)' },
   { field: '标签 (Tags)', operators: '<el-tag size="small">等于</el-tag>', notes: '效果为“包含该标签”。例：等于 <code>4K臻享</code> (输入时不含引号)' },
